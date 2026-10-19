@@ -23,7 +23,7 @@ computational" -> Table: peptoid_structure, solubility, method, article_DOI
 ## 3. Tools and data (3-6 tools)
 - database_logger: Check log if paper has already been read. If not, invoke data_extractor and write data/conclusion. If structure has already been reported, decide whether to skip, replace, or append. In: Source ID, log. Out: Updated log. Data source: n/a. Access checked: n/a.
 
-- peptoid_structure_extractor: Identify text or image naming or describing the labelled peptoid, extract the structure of the peptoid. In: Paper. Out: peptoid structure (SMILES). Data source: n/a. Access checked: n/a.
+- peptoid_structure_extractor: Identify text or image naming or describing the labelled peptoid, extract the structure of the peptoid. If confidence is low, flag for human review. In: Paper. Out: peptoid structure (SMILES). Data source: n/a. Access checked: n/a.
 
 - data_extractor: Extract required data from the paper and validate the results to avoid hallucination.
 In: Paper, target, constraints. Out: structured data. Source: Paper. Access checked: Yes.
