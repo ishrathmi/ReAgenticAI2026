@@ -14,7 +14,11 @@ computational" -> Table: peptoid_structure, solubility, method, article_DOI
 
 
 ## 2. Why an agent?
-
+* Identify data (user defined)
+* Apply constraints (user defined)
+* Organise data sources
+* Saving a record of both good and bad sources
+* Optional: Finding new data sources
 <Which decisions does the model make while it runs? If you already
 know every step, write "workflow". That is a fine answer.>
 
@@ -22,7 +26,8 @@ know every step, write "workflow". That is a fine answer.>
 ## 3. Tools and data (3-6 tools)
 - <tool name>: <what it does>. In: <...>. Out: <...>.
   Data source: <...>. Access checked: <yes/no>
-
+- database_logger: Checks log if paper has not yet been read. If not, reads paper and writes data/conclusion. In: Paper.
+  Out: Log. 
 
 ## 4. Baseline (Milestone III, Tue 5 PM)
 A single LLM call with no tools to extract data from a large number of papers.
