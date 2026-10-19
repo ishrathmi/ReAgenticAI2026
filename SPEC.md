@@ -53,7 +53,7 @@ A single LLM call with no tools to extract data from a large number of papers. (
 - Roles: 
 All: Collect 10-20 papers from own fields + label data
 Charlie:
-Filip: 
+Filip:
 Anthony:
 Ellis:
 Ishrath:	
