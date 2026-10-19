@@ -1,18 +1,20 @@
 ```markdown
-# <Project name>, Team <n>
+# ChemScraper, Team ReAgenticAI2026
 
 
-Members: <names>
-Repo: <URL>
+Members: Xu Chen, Filip Anies, Anthony Pembere, Ellis Kennedy, Ishrath Mohamed Irshadeen
+Repo: https://github.com/ishrathmi/ReAgenticAI2026
 
 
 ## 1. Task
-<2-3 sentences: the science question, who would use this tool,
-what goes in, what comes out.>
-Example: <one concrete input> -> <the output you expect>
+Extracting data from published articles. For researchers looking to build datasets from published data from multiple
+sources. Target data and constraints are defined by user, values and data sources are returned by agent.
+Example: target: "Peptoid aqueous solubility", constraints: "Method must be defined as experimental or
+computational" -> Table: peptoid_structure, solubility, method, article_DOI
 
 
 ## 2. Why an agent?
+
 <Which decisions does the model make while it runs? If you already
 know every step, write "workflow". That is a fine answer.>
 
@@ -23,8 +25,7 @@ know every step, write "workflow". That is a fine answer.>
 
 
 ## 4. Baseline (Milestone III, Tue 5 PM)
-<The simplest version that runs end to end, e.g. one LLM call with
-no tools, or a fixed script. Your agent will be compared to it.>
+A single LLM call with no tools to extract data from a large number of papers.
 
 
 ## 5. Evaluation (Milestone IV, Wed 11 AM)
