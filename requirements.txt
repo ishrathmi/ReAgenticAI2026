@@ -1,0 +1,5 @@
+pyyaml
+jsonschema>=4.18   # brings referencing
+pytest
+openai             # OpenRouter (OpenAI-compatible) and OpenAI
+anthropic          # Anthropic API
