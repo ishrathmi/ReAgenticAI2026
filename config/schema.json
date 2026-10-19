@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Extraction record",
+  "description": "Draft fields for the team to agree on. Edit to suit your use case.",
+  "type": "object",
+  "required": ["doi", "compound"],
+  "properties": {
+    "doi": {"type": "string"},
+    "compound": {"type": "string", "description": "Name or identifier of the compound or material"},
+    "smiles": {"type": ["string", "null"]},
+    "reaction_conditions": {"type": ["string", "null"], "description": "Solvent, temperature, time, catalyst, light source"},
+    "yield_percent": {"type": ["number", "null"]},
+    "characterisation": {"type": "array", "items": {"type": "string"}, "description": "e.g. 1H NMR, SEC, MALDI-ToF"},
+    "evidence": {"type": "string", "description": "Quoted sentence or table reference supporting the record"}
+  }
+}

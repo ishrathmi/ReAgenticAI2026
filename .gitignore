@@ -1,0 +1,36 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python environment and build files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# Tools
+.pytest_cache/
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# Caches, run outputs and traces
+.cache/
+cache/
+traces/
+outputs/
+*.log
+
+# Downloaded papers (do not commit full texts)
+data/raw/
+data/papers/
+*.pdf
+!data/sample/*.pdf
+
+# OS files
+.DS_Store
+Thumbs.db

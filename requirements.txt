@@ -1,0 +1,19 @@
+# Python 3.10+. Install with: pip install -r requirements.txt
+# Minimum versions are given; pin exact versions (pip freeze) once the team agrees on a working set.
+
+# Model access and agent core
+openai>=1.40          # OpenRouter is OpenAI-compatible
+python-dotenv>=1.0    # loads OPENROUTER_API_KEY from .env
+pyyaml>=6.0           # config/papers.yaml
+jsonschema>=4.18      # validates extracted records against config/schema.json
+
+# Literature retrieval and parsing
+httpx>=0.27           # API calls (Crossref, OpenAlex, Semantic Scholar, arXiv, ChemRxiv, Europe PMC)
+beautifulsoup4>=4.12  # HTML/XML parsing
+pymupdf>=1.24         # PDF text extraction (imported as fitz)
+
+# Testing
+pytest>=8.0
+
+# Optional: chemistry validation of extracted structures/SMILES
+# rdkit>=2024.3

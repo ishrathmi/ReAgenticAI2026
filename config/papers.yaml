@@ -1,0 +1,6 @@
+# Papers to process. Each researcher edits this file for their own needs.
+# Use DOIs where possible; queries are resolved through the search tool.
+dois:
+  - 10.0000/replace-with-a-real-doi
+queries: []
+#  - "photoinduced polymerization peptoid"
