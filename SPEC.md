@@ -50,11 +50,11 @@ A single LLM call with no tools to extract data from a large number of papers. (
 - Biggest risk: Difficult to extract chemical structures.
 - Fallback if you are behind on Tuesday at noon: Smaller version of initial plan with fewer papers included and simple “applicable” / “not applicable” classification instead of pulling out specific characteristics/values.
 - Limits: <max steps, max tokens, expected spend from your keys>
-- Roles:
-All: Collect 10-20 papers from own fields + label data
-Charlie:
-Filip:
-Anthony:
-Ellis:
-Ishrath:	
+- Roles:  
+All: Collect 10-20 papers from own fields + label data  
+Charlie:  
+Filip:  
+Anthony:  
+Ellis:  
+Ishrath:  	
 
