@@ -111,8 +111,8 @@ class App(SimpleHTTPRequestHandler):
 
     def save_profile(self, md, name=None):
         prof = parse(md)
-        if not (name or prof.get("topic")) and any(g["terms"] for g in prof["concepts"]):
-            # no topic yet: park it under a temporary name; the pipeline names it from the keywords
+        if not (name or prof.get("topic")) and (any(g["terms"] for g in prof["concepts"]) or prof.get("description", "").strip()):
+            # no topic yet: park it under a temporary name; the pipeline names it from the keywords or description
             name = "untitled-" + time.strftime("%Y%m%d-%H%M%S")
         name, path = self.profile_path(name or prof.get("topic", ""))
         with open(path, "w") as f:
@@ -215,8 +215,8 @@ class App(SimpleHTTPRequestHandler):
                     else:
                         name, path = self.profile_path(b.get("name", ""))
                     prof = parse(open(path).read())
-                    if not prof["concepts"] and not prof.get("description"):
-                        return self.send_json({"error": "Add some keywords or a description first"}, 400)
+                    if not prof["concepts"] and not prof.get("description") and not prof.get("topic"):
+                        return self.send_json({"error": "Add some keywords, a sentence about your interest, or a topic first"}, 400)
                     status = os.path.join(self.project, "digests", "_cache", "job_status.json")
                     os.makedirs(os.path.dirname(status), exist_ok=True)
                     if os.path.exists(status):

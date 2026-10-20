@@ -90,38 +90,80 @@ def all_terms(prof):
     return [t for g in prof.get("concepts", []) for t in g["terms"]]
 
 
+STOPWORDS = set("""a an and are as at be by can collect do does find for from get how i in into is it its
+list me my of on or our paper papers please show study that the their them these this those to use used uses
+using want we what which who will with all any about new recent research produce produces producing
+production make makes making give gives look looking interested interest focus related""".split())
+
+
+def fallback_terms(text, limit=12):
+    """Without Claude: pull keyword-like words out of a sentence (acronyms, long words, hyphenated terms)."""
+    words = re.findall(r"[A-Za-z][A-Za-z0-9\-]*[A-Za-z0-9]|[A-Z]{2,}", text or "")
+    out = []
+    for w in words:
+        if w.lower() in STOPWORDS or (len(w) < 4 and not w.isupper()):
+            continue
+        if w.lower() not in {x.lower() for x in out}:
+            out.append(w)
+    return out[:limit]
+
+
 def autofill(prof, use_claude=True):
-    """Fill an empty topic and/or description from the keywords. Returns (filled_fields, via)."""
-    missing = [k for k in ("topic", "description") if not (prof.get(k) or "").strip()]
+    """Fill whatever is blank (topic, description, keywords) from whatever the user gave.
+    Returns (filled_fields, via); filled_fields may include "concepts"."""
     terms = all_terms(prof)
-    if not missing or not terms:
+    have = {"topic": bool((prof.get("topic") or "").strip()), "description": bool((prof.get("description") or "").strip()),
+            "keywords": bool(terms)}
+    missing = [k for k, v in have.items() if not v]
+    if not missing or not any(have.values()):
         return {}, None
     if use_claude:
-        groups = "\n".join(f"- {g['name']}: {', '.join(g['terms'])}" for g in prof["concepts"])
-        prompt = f"""A researcher listed these keywords for a weekly bioRxiv literature screen, but left some fields blank.
+        groups = "\n".join(f"- {g['name']}: {', '.join(g['terms'])}" for g in prof["concepts"]) or "(none)"
+        want = {"topic": '"topic": "4-10 word research-topic title, sentence case, no trailing period (e.g. \\"Phage therapy against antibiotic-resistant bacteria\\")"',
+                "description": '"description": "2-3 sentences: what this researcher studies and what a relevant paper reports, so a scorer can tell on-topic papers from merely related ones"',
+                "keywords": '"concepts": [{"name": "facet name", "weight": 1-4, "terms": ["..."]}]  (3-5 groups, one per facet of the request, weight 4 = core; 8-20 terms each: synonyms, spelled-out abbreviations AND the abbreviations, organism / enzyme / pathway / product names an on-topic abstract would literally contain; avoid bare generic words like "model", "production", "microbiome")'}
+        prompt = f"""A researcher is setting up a weekly preprint literature screen (bioRxiv, medRxiv, ChemRxiv) and left some fields blank.
+What they gave:
+Topic: {prof.get('topic') or '(blank)'}
+Description / request: {prof.get('description') or '(blank)'}
 Keywords by group:
 {groups}
-Topic: {prof.get('topic') or '(blank)'}
-Description: {prof.get('description') or '(blank)'}
 Notes: {prof.get('notes') or '(none)'}
 
-Write the blank fields only. Return JSON: {{"topic": "...", "description": "..."}}
-- topic: a concise research-topic title, 4-10 words, sentence case, no trailing period (e.g. "Phage therapy against antibiotic-resistant bacteria").
-- description: 2-3 sentences on what this researcher studies and what a relevant paper would report. Write it so a scorer can tell on-topic papers from merely related ones. Base it only on the keywords; don't invent a narrower focus."""
+The request may be phrased as a task (e.g. "collect all the bacteria that use RBO to produce MCFA"); treat it as the research interest and expand abbreviations (RBO = reverse beta-oxidation, MCFA = medium-chain fatty acids).
+Write ONLY the blank fields, based only on what they gave; don't invent a narrower focus. Return one JSON object with these keys:
+{{{", ".join(want[k] for k in missing)}}}"""
         try:
-            out = extract_json(claude(prompt, timeout=180))
-            got = {k: str(out.get(k, "")).strip() for k in missing if str(out.get(k, "")).strip()}
+            out = extract_json(claude(prompt, timeout=240))
+            got = {k: str(out.get(k, "")).strip() for k in ("topic", "description") if k in missing and str(out.get(k, "")).strip()}
+            if "keywords" in missing:
+                cs = [{"name": str(g.get("name") or "Keywords").strip(), "weight": max(1, min(4, int(g.get("weight", 2)))),
+                       "terms": list(dict.fromkeys(str(t).strip() for t in g.get("terms", []) if str(t).strip()))}
+                      for g in out.get("concepts", []) if isinstance(g, dict)]
+                cs = [c for c in cs if c["terms"]]
+                if cs:
+                    got["concepts"] = cs
             if got:
                 return got, "claude"
         except Exception as e:
             print(f"autofill via Claude failed: {e}", file=sys.stderr)
-    # fallback without Claude: build both from the keywords themselves
+    # fallback without Claude: build the blanks from the words the user gave
     got = {}
+    source_text = " ".join(filter(None, [prof.get("topic"), prof.get("description")]))
+    if "keywords" in missing:
+        kw = fallback_terms(source_text)
+        if kw:
+            got["concepts"] = [{"name": "Unsorted keywords", "weight": 2, "terms": kw}]
+            terms = kw
     if "topic" in missing:
-        head = terms[:3]
-        t = ", ".join(head[:-1]) + " and " + head[-1] if len(head) > 1 else head[0]
+        if have["description"]:
+            words = prof["description"].strip().rstrip(".").split()
+            t = " ".join(words[:10]) + ("…" if len(words) > 10 else "")
+        else:
+            head = terms[:3]
+            t = ", ".join(head[:-1]) + " and " + head[-1] if len(head) > 1 else head[0]
         got["topic"] = t[0].upper() + t[1:]
-    if "description" in missing:
+    if "description" in missing and terms:
         got["description"] = "Papers about " + ", ".join(terms[:12]) + (", and related topics." if len(terms) > 12 else ".")
     return got, "keywords"
 
@@ -203,11 +245,11 @@ def run(a):
     prof = parse(md_text)
     have_claude = bool(shutil.which("claude")) and not a.no_claude
 
-    # 0. fill a blank topic / description from the keywords (written back into the .md)
-    if not prof.get("topic") or not (prof.get("description") or "").strip():
-        if not all_terms(prof):
-            raise ValueError("The profile has no topic and no keywords")
-        st.step("refine", "running", "Writing a topic and description from your keywords…")
+    # 0. fill a blank topic / description / keyword list from what the user did give (written back into the .md)
+    if not prof.get("topic") or not (prof.get("description") or "").strip() or not all_terms(prof):
+        if not (prof.get("topic") or (prof.get("description") or "").strip() or all_terms(prof)):
+            raise ValueError("The profile is empty: add keywords, a description or a topic")
+        st.step("refine", "running", "Filling in the blanks from what you wrote…")
         got, via = autofill(prof, have_claude)
         prof.update(got)
         st.log(f"autofilled {', '.join(got)} via {via}")
@@ -223,7 +265,7 @@ def run(a):
         open(profile_path, "w").write(render(prof))
         md_text = open(profile_path).read()
         st.data["profile"] = os.path.basename(profile_path)[:-3]
-        st.data["autofilled"] = got
+        st.data["autofilled"] = {("keywords" if k == "concepts" else k): v for k, v in got.items()}
         st.write()
     days = a.days or int(prof.get("days", 7))
     sources = parse_sources(a.sources or prof.get("sources") or "")

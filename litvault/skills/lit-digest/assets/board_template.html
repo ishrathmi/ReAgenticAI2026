@@ -925,7 +925,8 @@ function quickAdd(){
   const isList = splitTerms(raw).every(t => t.split(/\s+/).length <= 5);
   if(target === 'auto') target = isList ? 'unsorted' : 'desc';
   if(target === 'desc'){
-    P.description = (P.description ? P.description.trim() + '\n\n' : '') + raw; msg = 'Added to the description';
+    P.description = (P.description ? P.description.trim() + '\n\n' : '') + raw;
+    msg = hasTerms() ? 'Added to the description' : 'Added to the description — Claude will turn it into keywords when you save or start the retrieval';
   } else {
     let list, name;
     if(target === 'neg'){ list = P.negative; name = 'Exclude' }
@@ -955,22 +956,28 @@ async function api(path, body){
   return j;
 }
 const hasTerms = () => P.concepts.some(g => g.terms.length);
-// blank topic/description + some keywords: ask Claude (via the server) to fill them in on the page,
-// so the user sees and can edit them before anything is saved
+const hasAnything = () => hasTerms() || P.description.trim() || P.topic.trim();
+// some of topic / description / keywords blank: ask Claude (via the server) to fill them in from the rest,
+// on the page, so the user sees and can edit them before anything is saved
 let filling = false;
 async function ensureFilled(){
-  const blank = [!P.topic.trim() && 'topic', !P.description.trim() && 'description'].filter(Boolean);
-  if(!API || !blank.length || !hasTerms() || filling) return;
+  const blank = [!P.topic.trim() && 'topic', !P.description.trim() && 'description', !hasTerms() && 'keywords'].filter(Boolean);
+  if(!API || !blank.length || !hasAnything() || filling) return;
   filling = true;
   const btns = [$('#p-run'), $('#p-save'), $('#p-save2')]; btns.forEach(b => b.disabled = true);
-  toast(`Writing a ${blank.join(' and ')} from your keywords…`, null);
+  const from = hasTerms() ? 'your keywords' : P.description.trim() ? 'your description' : 'your topic';
+  toast(`Writing the ${blank.join(' and ')} from ${from}…`, null);
   try {
     const before = renderMd(P), r = await api('/api/autofill', {md:renderMd(P)});
-    const done = blank.filter(k => r[k] && !P[k].trim());  // don't overwrite anything typed meanwhile
-    done.forEach(k => P[k] = r[k]);
+    const done = [];
+    for(const k of ['topic', 'description']) if(blank.includes(k) && r[k] && !P[k].trim()){ P[k] = r[k]; done.push(k) }  // don't overwrite anything typed meanwhile
+    if(blank.includes('keywords') && Array.isArray(r.concepts) && r.concepts.length && !hasTerms()){
+      P.concepts = r.concepts.map(g => ({name:String(g.name || 'Keywords'), weight:Math.max(1, Math.min(4, +g.weight || 2)), terms:(g.terms || []).map(String).filter(Boolean)})).filter(g => g.terms.length);
+      if(P.concepts.length) done.push('keywords');
+    }
     if(done.length){
       sync(); pOpen(true);
-      toast(`Filled in the ${done.join(' and ')}${r.via === 'claude' ? '' : ' from your keywords (Claude unavailable)'} — edit anytime`, () => { P = parseMd(before); sync() });
+      toast(`Filled in the ${done.join(' and ')}${r.via === 'claude' ? '' : ' (Claude unavailable, so just from your words)'} — edit anytime`, () => { P = parseMd(before); sync() });
     }
   } catch(e){ toast('Could not fill in the blanks: ' + e.message, null) }
   btns.forEach(b => b.disabled = false); filling = false;
@@ -979,7 +986,11 @@ async function ensureFilled(){
 async function saveProfile(quiet){
   await ensureFilled();
   const md = renderMd(P);
-  if(!P.topic.trim()){ toast(hasTerms() ? 'Give the topic a name first' : 'Add some keywords or a topic first', null); pOpen(true); (hasTerms() ? $('#p-topic') : $('#qa-input')).focus(); return null }
+  if(!P.topic.trim()){
+    const any = hasAnything();
+    toast(!any ? 'Type some keywords or a sentence about your interest first' : API ? 'Give the topic a name first' : 'Give the topic a name first (filling it in automatically needs the LitVault server)', null);
+    pOpen(true); (any ? $('#p-topic') : $('#qa-input')).focus(); return null;
+  }
   if(API){
     try {
       const r = await api('/api/profile', {md});
@@ -1067,7 +1078,7 @@ async function poll(){
 }
 $('#p-run').onclick = async () => {
   if(!API){ pOpen(true); toast('Start the LitVault server to run retrievals from this page (see the note in the editor)', null); return }
-  if(!hasTerms() && !P.description.trim()){ toast('Add some keywords first — the topic and description can be left blank', null); $('#qa-input').focus(); return }
+  if(!hasAnything()){ toast('Type some keywords or a sentence about your interest first — the rest can be left blank', null); $('#qa-input').focus(); return }
   const saved = await saveProfile(true); if(!saved) return;
   try {
     showJob({steps:[], done:false});
