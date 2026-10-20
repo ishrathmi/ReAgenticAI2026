@@ -35,10 +35,11 @@ What the agent extracts and how it decides. Rules are numbered so that code, pro
 **P5.** For HOMO/LUMO obtained computationally (density functional theory, DFT), report the computational method: functional and basis set, e.g. B3LYP/6-31G(d,p). Also include any other important method information, likely to be unusual.
 - **P5a.** Report HOMO/LUMO as negative values in eV.
 - **P5b.** If DFT is discussed but values are only shown in a figure, read figure captions to find the relevant figure, then read the values from it.
+- **P5c.** IP/EA calculated by DFT are not collected.
 
 **P6.** For IP/EA values, report the method used to obtain them.
 - **P6a.** Cyclic voltammetry with ferrocene as internal reference or calibration: `CV`. CV referenced to an electrode (e.g. Ag/Ag⁺) without ferrocene: `CV w/o Fc`.
-- **P6b.** IP/EA from CV with a ferrocene reference are reported with the Fc/Fc⁺ couple at **4.8 eV**. If the paper anchors ferrocene at another value (e.g. 4.4 or 5.1 eV), adjust the values: `value_reported + (4.8 − anchor_used)`. If the reference is not stated, use `CV w/o ref`.
+- **P6b.** IP/EA from CV with a ferrocene reference are reported with the Fc/Fc⁺ couple at **4.8 eV**. If the paper anchors ferrocene at another value (e.g. 4.4 or 5.1 eV), adjust the values: `value_reported + (4.8 − anchor_used)`. If the reference is not stated, use `CV w/o ref`. Before labelling a value `CV w/o ref`, check the CV figures, their captions, the experimental section and the SI for the reference electrode and Fc energy.
 - **P6c.** Other methods are reported by name, e.g. `UPS`, `IPES`, `PESA`.
 - **P6d.** If a value is derived from a measurement plus the optical gap (Eg), e.g. LUMO = HOMO + Eg, note it in the method of the derived value: `CV + Eg`, `UPS + Eg`.
 - **P6e.** Report IP/EA as positive values in eV (convert if reported as negative HOMO/LUMO).
@@ -70,6 +71,7 @@ Sub-rules:
 `name,smiles,homo_dft,lumo_dft,dft_method,ip,ip_method,ea,ea_method,comment,source_doi`
 - **W2a.** If the SMILES has already been reported, check that the names agree. If they don't, mark for human review. After review, sync names so all synonyms are reported (e.g. "P(NDI2OD-T2)" and "PNDI2OD-T2" become "PNDI2OD-T2, P(NDI2OD-T2)").
 - **W2b.** If the name has already been reported, check that the SMILES agree. If they don't, mark for human review.
+- **W2c.** If a compound has values from several measurements (e.g. film and solution, or CV and UPS), each set of values goes on its own row. DFT values appear on the first row only.
 
 **W3. Sorting is per compound, status is per paper.** Each compound record is sorted on its own: complete and unflagged records go to the **data** table, flagged ones (P3c, P3e, P6f, P7c, W2a, W2b) go to the **review** table with the reason. A paper's status follows from its compounds:
 
