@@ -1,0 +1,77 @@
+# Define what the agent should pull out of every PDF.
+#
+# Each field becomes a column in the database.
+#   name:        column name (letters, numbers, underscores)
+#   type:        string | number | integer | boolean | list
+#   description: tell the model exactly what you want — units, format, edge cases
+#
+# records_per_paper:
+#   one  -> one row per paper
+#   many -> several rows per paper (here: one row per microbe)
+#
+# You can add fields later. Re-run with --refill to fill new columns for old papers.
+
+records_per_paper: many
+
+instructions: >
+  You are extracting data about microorganisms and medium-chain fatty acid (MCFA)
+  production from microbiology papers. Use only what the paper states; do not infer
+  from background knowledge. If a value is not reported, return null rather than guessing.
+
+fields:
+  - name: microbe_name
+    type: string
+    description: >
+      Name of the microorganism as the paper gives it, including the strain
+      designation when present (e.g. "Megasphaera elsdenii LC1" or
+      "Clostridium kluyveri DSM 555"). For a mixed or undefined culture with no
+      species name, give the paper's own label for it (e.g. "reactor enrichment
+      culture R2"). One record per distinct organism or culture studied.
+
+  - name: makes_mcfa
+    type: boolean
+    description: >
+      True if the paper reports that this organism produces medium-chain fatty acids
+      (C6-C12, e.g. caproate/hexanoate, enanthate/heptanoate, caprylate/octanoate).
+      False if the paper reports it does not, or reports only short-chain products
+      such as acetate, propionate or butyrate. Null if MCFA production is not
+      addressed for this organism.
+
+  - name: mcfa_products
+    type: list
+    description: >
+      The specific MCFAs this organism is reported to produce. Use one entry per distinct
+      compound, with the anion name only: caproate, enanthate, caprylate, pelargonate,
+      caprate. Do not list the same compound twice under different names — caproate and
+      hexanoic acid are one compound, so record only "caproate". Empty list if none
+      are reported.
+
+  - name: mcfa_titer
+    type: string
+    description: >
+      Highest MCFA concentration or yield reported for this organism, copied with its
+      units and the product it refers to (e.g. "8.2 g/L caproate"). Null if not reported.
+
+  - name: isolation_source
+    type: string
+    description: >
+      The physical place or material the organism came from, as the paper describes it —
+      the isolation source for a pure strain (e.g. "rumen fluid of a dairy cow",
+      "anaerobic digester sludge") or the inoculum/microbiome source for a mixed culture.
+      Give the environment only: no culture collection numbers, no strain designations,
+      no citation markers. Null if not stated. If the paper says only that the strain came
+      from a culture collection and never names an environment, return null here.
+
+  - name: source_type
+    type: string
+    description: >
+      One short category for the source, chosen from: gut/rumen, soil, sediment,
+      wastewater/sludge, bioreactor/enrichment, food/fermented product, other.
+      Null if the source is not stated.
+
+  - name: strain_origin
+    type: string
+    description: >
+      How the organism was obtained in this study: "isolated in this study",
+      "culture collection" (give the collection number in isolation_source if listed),
+      "obtained from another lab/study", or "enriched in this study". Null if unclear.
