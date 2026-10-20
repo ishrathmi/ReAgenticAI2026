@@ -18,6 +18,7 @@ python run_agent.py --profile peptide_solubility             # extract and write
 | Filter | `tools/prefilter.py` | Keyword score per chunk (`prefilter.signals`); only high scorers go to the model |
 | Extract | `tools/extract.py` | Prompt built from `schema.json`; JSON reply; truncated replies salvaged |
 | Verify | `tools/extract.py` | Evidence quote must appear in the source text |
+| Coverage | `agent.py` | Tables are sent 4 rows at a time; values missing from the reply are counted and flagged (`coverage` in papers.yaml) |
 | Link | `agent.py` | Label-only records ("variant 7") get sequences from SI tables in the same `paper_groups` entry |
 | Enrich | `domains/peptide_solubility.py` | One-letter sequence, MW, conversion to mg/mL, K → °C, review flags |
 | Write | `output.py` | CSV + Excel (Records, Files processed, Field guide); flagged rows highlighted |
@@ -38,3 +39,5 @@ Sort or filter the Excel sheet on `needs_review`. `review_reason` states why a r
 - Mole-fraction and molality values are kept as reported; converting them needs solvent density.
 - MW conversion covers canonical residues with free, acetyl or amide termini.
 - Scanned (image-only) PDFs need OCR first.
+
+Failure types planned for the agent loop are listed in `docs/agent_loop_plan.md`.

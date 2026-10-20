@@ -37,13 +37,17 @@ instructions: |
   - In tables, report experimental values only. Skip columns of model-calculated values (e.g. "xcal", "calc", NRTL, predicted) unless no experimental value exists.
   - Values written as "0.077±0.003": put 0.077 in solubility_value and the uncertainty in notes.
   - Put co-solvent composition in solvent, e.g. "water/DMSO, 20% DMSO by mass".
+  - Tables: return one record for EVERY experimental value cell (each row x each peptide column). Do not stop early or summarise.
+  - Tables: evidence is the complete table row as written (e.g. "5% | 0.053±0.0002 | 0.065 | ...").
+  - Never guess a unit, terminus, pH or temperature. If the passage or caption does not state it, use null and explain in notes.
 evidence_field: evidence
 
 # Prefilter: only chunks scoring >= min_score are sent to the model ----------
 prefilter:
   min_score: 4
   max_chunks_per_file: 40
-  chunk_chars: 1500                 # smaller chunks keep long tables within one reply
+  chunk_chars: 1500
+  table_rows_per_chunk: 4           # tables are sent in parts of this many rows, header repeated
   required_pattern: "solub|insolub|dissol|precipitat"
   signals:
     - {pattern: '\bsolub\w*', weight: 3}
@@ -57,6 +61,13 @@ prefilter:
     - {pattern: '\b(PBS|HEPES|Tris|phosphate|DMSO|HFIP|acetonitrile|TFA)\b', weight: 1}
     - {pattern: '\b(peptides?|sequence|residues?)\b', weight: 1}
     - {pattern: '\b(nephelometr\w*|shake[- ]flask|supernatant|centrifug\w*|UV[- ]?vis|HPLC|CamSol|log ?S)\b', weight: 2}
+
+# Coverage check for tables: values in the table that are missing from the reply.
+# Records from tables below min_coverage are flagged; the run log lists every table checked.
+coverage:
+  value_field: solubility_value
+  exclude_columns: "cal|pred|model|nrtl|fit"
+  min_coverage: 0.8
 
 # Budget and output ----------------------------------------------------------
 llm:

@@ -14,6 +14,9 @@ pymupdf>=1.24         # PDF text extraction (imported as fitz)
 pdfplumber>=0.11      # PDF table extraction
 openpyxl>=3.1         # reads SI spreadsheets; writes the Excel database
 
+# Model comparison charts (compare_models.py)
+matplotlib>=3.7
+
 # Testing
 pytest>=8.0
 

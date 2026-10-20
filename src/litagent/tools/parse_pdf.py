@@ -42,7 +42,13 @@ def parse_pdf(path: str) -> str:
     return "\n\n".join(c.text for c in parse_document(path).chunks if c.kind == "text")
 
 
-def parse_document(path, chunk_chars: int = 2500) -> Document:
+TABLE_ROWS = 4      # data rows per table chunk; set from prefilter.table_rows_per_chunk
+
+
+def parse_document(path, chunk_chars: int = 2500, table_rows: int | None = None) -> Document:
+    global TABLE_ROWS
+    if table_rows:
+        TABLE_ROWS = int(table_rows)
     path = Path(path)
     doc = Document(doc_id=hashlib.sha1(path.read_bytes()).hexdigest()[:10], path=path)
     suffix = path.suffix.lower()
@@ -126,13 +132,22 @@ def _rows_to_text(rows) -> str:
 
 
 def _split_table(text: str, max_chars: int) -> list:
+    """Split a table into parts of at most TABLE_ROWS data rows (and max_chars), repeating the header.
+
+    Small parts matter: a reply covering 4 rows x 8 columns stays well inside the output
+    limit, whereas a whole table often comes back incomplete.
+    """
+    return _split_rows(text, max_chars, TABLE_ROWS)
+
+
+def _split_rows(text: str, max_chars: int, max_rows: int) -> list:
     """Split long tables by rows, repeating the header row in every piece."""
     lines = text.split("\n")
-    if len(text) <= max_chars or len(lines) < 3:
+    if (len(text) <= max_chars and len(lines) - 1 <= max_rows) or len(lines) < 3:
         return [text]
     header, pieces, buf = lines[0], [], []
     for line in lines[1:]:
-        if buf and len(header) + sum(len(x) + 1 for x in buf) + len(line) > max_chars:
+        if buf and (len(buf) >= max_rows or len(header) + sum(len(x) + 1 for x in buf) + len(line) > max_chars):
             pieces.append("\n".join([header] + buf))
             buf = []
         buf.append(line)

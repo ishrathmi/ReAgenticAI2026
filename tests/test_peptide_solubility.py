@@ -113,3 +113,44 @@ def test_run_logger(tmp_path):
     assert [e["event"] for e in events] == ["run_start", "llm_call", "stage", "llm_call", "run_end"]
     assert events[1]["file"] == "a.pdf"
     assert (tmp_path / "runs" / "runs.csv").read_text().startswith("run_id,")
+
+
+def test_three_letter_and_names():
+    from litagent.domains.peptide_solubility import enrich, sequence_from_name
+    assert to_one_letter("ala-ala") == "AA"
+    assert to_one_letter("Gly-Ala") == "GA"
+    assert to_one_letter("H-GLY-GLY-OH") == "GG"
+    assert to_one_letter("AA (ala-ala)") == "AA"
+    assert sequence_from_name("AG (ala-gly)") == "ala-gly"
+    assert sequence_from_name("P3") is None
+    rec = enrich({"peptide_name": "GA (gly-ala)", "solubility_value": 0.1, "solubility_unit": "mole fraction",
+                  "evidence_verified": True})
+    assert rec["sequence_one_letter"] == "GA" and rec["sequence_source"] == "parsed from peptide name"
+    assert not rec["needs_review"]
+
+
+def test_table_split_and_coverage():
+    from litagent.agent import table_coverage
+    from litagent.tools.parse_pdf import _split_rows
+    table = "c | AA | xcal | GG\n" + "\n".join(f"{i}% | 0.0{i}1 | 0.9{i} | 0.0{i}2" for i in range(9))
+    parts = _split_rows(table, 5000, 4)
+    assert len(parts) == 3 and all(p.startswith("c | AA | xcal | GG") for p in parts)
+    cfg = {"value_field": "solubility_value", "exclude_columns": "cal"}
+    recs = [{"solubility_value": 0.001}, {"solubility_value": 0.002}]
+    cov = table_coverage(parts[0], recs, cfg)        # rows 0-3: 8 experimental cells, xcal ignored
+    assert cov == {"cells": 8, "matched": 2, "coverage": 0.25}
+
+
+def test_compare_matching():
+    import importlib.util, pathlib
+    spec = importlib.util.spec_from_file_location("cm", pathlib.Path(__file__).parents[1] / "compare_models.py")
+    cm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cm)
+    gold = [{"source_file": "a.pdf", "peptide_name": "teixobactin", "solubility_qualitative": "gel"},
+            {"source_file": "a.pdf", "peptide_name": "Arg10-teixobactin", "solubility_qualitative": "gel"},
+            {"source_file": "a.pdf", "peptide_name": "Variant 3", "solubility_value": "0.09"}]
+    recs = [{"source_file": "a.pdf", "peptide_name": "Arg10–teixobactin", "solubility_qualitative": "gel"},
+            {"source_file": "a.pdf", "peptide_name": "GLP-1 variant 3 (Run1)", "solubility_value": 0.09}]
+    pairs = cm.match(gold, recs)
+    assert pairs[0][1] is None                                  # plain 'teixobactin' must not take Arg10's record
+    assert pairs[1][1] is recs[0] and pairs[2][1] is recs[1]

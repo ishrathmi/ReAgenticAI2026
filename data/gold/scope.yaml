@@ -1,0 +1,9 @@
+# Which files in the reference set are annotated COMPLETELY.
+# complete: true  -> every solubility record in this file is in the reference set, so a model's
+#                    extra records from this file count against its precision.
+# complete: false -> only recall is measured for this file (extra records are ignored).
+# Set a file to true only after you have checked that nothing is missing.
+files:
+  1-s2.0-S0167732224007980-mmc1.docx: {complete: true}
+  s41467-023-42940-w-2.pdf: {complete: false}     # PEG-assay curves are figures only
+  d2sc02670h.pdf: {complete: false}                # qualitative group statements; naming varies

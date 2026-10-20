@@ -104,7 +104,7 @@ def run(papers_config: dict, schema: dict, model, root: Path | None = None, dry_
     for path, meta in sources:
         try:
             with log.stage("parse", file=path.name):
-                doc = parse_document(path, pf.get("chunk_chars", 2500))
+                doc = parse_document(path, pf.get("chunk_chars", 2500), pf.get("table_rows_per_chunk"))
         except Exception as exc:
             print(f"- {path.name}: [skip] could not read ({exc})")
             files.append({"file": path.name, "status": f"unreadable: {exc}"})
@@ -143,14 +143,27 @@ def run(papers_config: dict, schema: dict, model, root: Path | None = None, dry_
             except Exception as exc:
                 print(f"  [warn] {c.label}: {exc}")
                 continue
+            cov_cfg = cfg.get("coverage")
+            if cov_cfg and c.kind == "table":
+                cov = table_coverage(c.text, found, cov_cfg)
+                if cov is not None:
+                    log.event("table_coverage", file=path.name, location=c.label, **cov)
+                    if cov["coverage"] < cov_cfg.get("min_coverage", 0.8):
+                        summary.setdefault("incomplete_tables", [])
+                        summary["incomplete_tables"].append(f"{c.label} ({cov['coverage']:.0%})")
+                        for rec in found:
+                            rec["_problems"] = [f"table only {cov['coverage']:.0%} extracted "
+                                                f"({cov['matched']}/{cov['cells']} values)"]
             for rec in found:
-                rec["_problems"] = _schema_problems(rec, schema)
+                rec["_problems"] = rec.get("_problems", []) + _schema_problems(rec, schema)
                 rec.update(doi=doc.doi, paper_title=doc.title, source=meta["source"],
                            source_file=path.name, page=c.page, location=c.label, _group=group,
                            model=getattr(model, "model", ""),
                            extracted_at=datetime.now().isoformat(timespec="seconds"))
                 records.append(rec)
             summary["records"] += len(found)
+        if isinstance(summary.get("incomplete_tables"), list):
+            summary["incomplete_tables"] = "; ".join(summary["incomplete_tables"])
         files.append(summary)
         if stop:
             break
@@ -169,15 +182,57 @@ def run(papers_config: dict, schema: dict, model, root: Path | None = None, dry_
     return dedupe(out, cfg.get("dedupe_keys")), files
 
 
+# --- table coverage --------------------------------------------------------------
+
+_NUM = re.compile(r"[-+]?\d*\.\d+|[-+]?\d+")
+
+
+def table_coverage(text: str, records: list, cov_cfg: dict) -> dict | None:
+    """Fraction of numeric table cells that appear as a value in the extracted records.
+
+    The first column (row labels) and columns whose header matches exclude_columns
+    (e.g. calculated values) are not counted. Returns None for tables with no numbers.
+    """
+    rows = [r.split(" | ") for r in text.split("\n") if " | " in r]
+    if len(rows) < 2:
+        return None
+    header = rows[0]
+    skip = re.compile(cov_cfg.get("exclude_columns", "$^"), re.I)
+    keep = [i for i, h in enumerate(header) if i > 0 and not skip.search(h)]
+    cells = []
+    for r in rows[1:]:
+        for i in keep:
+            if i < len(r):
+                m = _NUM.search(r[i].replace("−", "-"))
+                if m:
+                    cells.append(float(m.group(0)))
+    if not cells:
+        return None
+    key = cov_cfg.get("value_field", "value")
+    got = []
+    for rec in records:
+        try:
+            got.append(float(rec.get(key)))
+        except (TypeError, ValueError):
+            pass
+    matched = sum(1 for v in cells if any(abs(v - g) <= 1e-9 + 1e-6 * abs(v) for g in got))
+    return {"cells": len(cells), "matched": matched, "coverage": round(matched / len(cells), 3)}
+
+
 # --- label -> sequence linking -----------------------------------------------
 
 _LABEL_PREFIX = re.compile(r"^(variant|compound|cpd\.?|peptide|pep\.?|no\.?|entry|#)\s*", re.I)
 
 
 def label_key(name) -> str | None:
+    """'Variant 7', 'GLP-1 variant 7 (Run1)', 'compound 7', '7' -> '7'; other names lower-cased."""
     if name is None:
         return None
-    s = _LABEL_PREFIX.sub("", str(name).strip())
+    s = re.sub(r"\([^)]*\)", "", str(name)).strip()
+    m = re.search(r"\b(?:variant|compound|cpd\.?|peptide|pep\.?|entry|no\.?)\s*#?\s*(\d+[a-zA-Z]?)\b", s, re.I)
+    if m:
+        return m.group(1).lower()
+    s = _LABEL_PREFIX.sub("", s)
     m = re.search(r"(\d+[a-zA-Z]?)\s*$", s)
     return (m.group(1) if m else s).lower() or None
 

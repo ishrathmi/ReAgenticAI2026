@@ -35,20 +35,46 @@ PERCENT_UNITS = {"% w/v", "%w/v", "% (w/v)", "wt% (w/v)"}
 NON_CONVERTIBLE = {"mole fraction", "x", "mol fraction", "mol/kg", "mol kg-1", "g/kg", "mg/g", "log s", "logs"}
 
 
+THREE_CODE_RE = re.compile(r"[A-Za-z]{3}(?:\s*-\s*[A-Za-z]{3})+")
+
+
+def _three_letter(s: str) -> str | None:
+    """'Ala-Gly', 'ala-ala', 'GLY-GLY' -> 'AG', 'AA', 'GG'; None if any code is unknown."""
+    codes = [c.strip().capitalize() for c in s.split("-")]
+    if all(c in THREE for c in codes):
+        return "".join(THREE[c] for c in codes)
+    return None
+
+
 def to_one_letter(seq) -> str | None:
-    """Canonical one-letter sequence, or None if the sequence has non-canonical residues."""
+    """Canonical one-letter sequence, or None if the sequence has non-canonical residues.
+
+    Accepts one-letter ('KLVFFAE'), three-letter in any case ('Ala-Gly', 'ala-ala'),
+    caps ('Ac-...-NH2', 'H-...-OH'), and labels with a sequence in brackets ('AA (ala-ala)').
+    """
     if not seq:
         return None
     s = str(seq).strip()
-    s = re.sub(r"^(H-|Ac-|H2N-|NH2-)", "", s)
-    s = re.sub(r"(-OH|-NH2|-NH₂|-CONH2)$", "", s)
-    if re.fullmatch(r"([A-Z][a-z]{2}-)+[A-Z][a-z]{2}", s):
-        try:
-            return "".join(THREE[r] for r in s.split("-"))
-        except KeyError:
-            return None
+    bracket = re.search(r"\(([^()]+)\)", s)
+    if bracket and THREE_CODE_RE.fullmatch(bracket.group(1).strip()):
+        s = bracket.group(1).strip()
+    s = re.sub(r"^(H-|Ac-|H2N-|NH2-)", "", s, flags=re.I)
+    s = re.sub(r"(-OH|-NH2|-NH₂|-CONH2)$", "", s, flags=re.I)
+    if THREE_CODE_RE.fullmatch(s):
+        one = _three_letter(s)
+        if one:
+            return one
     s = re.sub(r"[\s-]+", "", s)
     return s if re.fullmatch(r"[ACDEFGHIKLMNPQRSTVWY]+", s) else None
+
+
+def sequence_from_name(name) -> str | None:
+    """Use the peptide name as the sequence only if it is written in three-letter code."""
+    if not name:
+        return None
+    s = str(name)
+    m = THREE_CODE_RE.search(s)
+    return m.group(0) if m and _three_letter(re.sub(r"\s+", "", m.group(0))) else None
 
 
 def termini_from_sequence(seq) -> tuple:
@@ -99,12 +125,22 @@ def to_mg_per_ml(value, unit, mw) -> tuple:
 
 
 def enrich(rec: dict) -> dict:
+    if not rec.get("sequence"):
+        from_name = sequence_from_name(rec.get("peptide_name"))
+        if from_name:
+            rec["sequence"] = from_name
+            rec["sequence_source"] = "parsed from peptide name"
     n_guess, c_guess = termini_from_sequence(rec.get("sequence"))
     n_term = rec.get("n_terminus") or n_guess
     c_term = rec.get("c_terminus") or c_guess
     seq1 = to_one_letter(rec.get("sequence"))
     mw = molecular_weight(seq1, n_term, c_term)
     mgml, note = to_mg_per_ml(rec.get("solubility_value"), rec.get("solubility_unit"), mw)
+    conversion_failed = rec.get("solubility_value") is not None and mgml is None \
+        and bool(rec.get("solubility_unit")) and "kept as reported" not in note
+    failure_note = note
+    if mgml is not None and "molar" in note and not (n_term and c_term):
+        note += "; MW assumes free termini (not stated)"
 
     reasons = []
     t = rec.get("temperature_c")
@@ -116,8 +152,10 @@ def enrich(rec: dict) -> dict:
     conf = rec.get("confidence")
     if isinstance(conf, (int, float)) and conf < 0.6:
         reasons.append("low model confidence")
-    if rec.get("solubility_value") is not None and mgml is None and "kept as reported" not in note:
-        reasons.append(note or "value not converted")
+    if conversion_failed:
+        reasons.append(failure_note or "value not converted")
+    if rec.get("solubility_value") is not None and not rec.get("solubility_unit"):
+        reasons.append("unit not stated")
     if rec.get("solubility_value") is None and not rec.get("solubility_qualitative"):
         reasons.append("no value or qualitative result")
     if not rec.get("sequence"):

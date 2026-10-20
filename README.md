@@ -46,6 +46,18 @@ python run_agent.py --profile peptide_solubility             # writes outputs/pe
 
 To start your own profile, copy `config/peptide_solubility/` to `config/<your_topic>/`, then edit `task`, `instructions`, `prefilter.signals` and `schema.json`. Set `domain:` only if you add a post-processing module in `src/litagent/domains/` (unit conversion, derived values); otherwise remove the line.
 
+## Comparing models
+
+```bash
+python run_agent.py --profile peptide_solubility --model anthropic/claude-sonnet-5.5
+python run_agent.py --profile peptide_solubility --model openai/gpt-6.1-sol
+python compare_models.py            # charts and workbook in outputs/comparison/
+```
+
+`compare_models.py` scores every model output against the reference set in `data/gold/`
+(recall, precision, field accuracy), runs the automatic checks, measures agreement between
+models, and reports cost and run time. `summary.png` shows all of it on one page.
+
 ## Repository structure
 
 ```

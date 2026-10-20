@@ -108,6 +108,8 @@ def coerce(record: dict, schema: dict) -> dict:
         v = record.get(name)
         if isinstance(v, str) and v.strip().lower() in ("", "null", "none", "n/a", "na", "not stated"):
             v = None
+        if isinstance(v, str) and name.endswith("operator"):
+            v = v.replace("≥", ">=").replace("≤", "<=").replace("≈", "~").strip()
         if v is not None and _types(spec) & NUMERIC and isinstance(v, str):
             m = re.search(r"[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?", v.replace("−", "-"))
             v = float(m.group(0)) if m else v

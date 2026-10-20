@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import os
 import sys
 
@@ -45,8 +46,11 @@ def main(argv=None, model=None) -> int:
         print("\nDry run complete; no API calls made.")
         return 0
 
-    csv_path, xlsx_path = output.write(records, files, schema, str(ROOT / out.get("dir", "outputs")),
-                                       out.get("basename", args.profile or "records"))
+    basename = out.get("basename", args.profile or "records")
+    model_id = getattr(model, "model", "")
+    if model_id and out.get("model_in_filename", True):      # keep one output file per model for comparison
+        basename += "__" + re.sub(r"[^A-Za-z0-9.]+", "-", model_id).strip("-")
+    csv_path, xlsx_path = output.write(records, files, schema, str(ROOT / out.get("dir", "outputs")), basename)
     flagged = sum(1 for r in records if r.get("needs_review"))
     print(f"\n{len(records)} records ({flagged} flagged for review)")
     print(f"CSV:   {csv_path}\nExcel: {xlsx_path}")
