@@ -16,7 +16,7 @@ Two-stage screen: a keyword prefilter over *every* abstract in the window, then 
 When the user says "start LitVault", "open my literature board", or sets up a digest for the first time:
 1. Start the server in the background and leave it running: `python3 "$S/serve.py"` (options: `--project <folder>`, `--port 8780`). It listens on 127.0.0.1 only and prints the workspace path. If port 8780 is taken, pass another `--port`.
 2. Open http://localhost:8780 in the browser pane (or tell the user to open it). With no digests yet, it shows an empty board for a new topic.
-3. Explain the flow in two lines. Type keywords in the **Research interest** bar; the topic and description can stay blank, because Claude fills them in. Tick the databases, press **Start literature retrieval**, then drag papers into vaults.
+3. Explain the flow in two lines. Type keywords or a plain sentence ("collect all the bacteria that use RBO to produce MCFA") in the **Research interest** bar. Whatever is left blank (topic, description or keywords) Claude fills in from the rest. Tick the databases, press **Start literature retrieval**, then drag papers into vaults.
 
 **Start literature retrieval** runs `scripts/pipeline.py`, which does every step below by itself (Claude steps go through headless `claude -p` with no tools). The board shows each step live and opens the new board when done. If `claude -p` can't log in, the run still finishes with keyword scores and an amber warning. Tell the user to run `claude` in a terminal and log in again.
 
@@ -26,6 +26,7 @@ When the user says "start LitVault", "open my literature board", or sets up a di
    - Exclude terms for common false-positive contexts, and Preferred categories (bioRxiv/medRxiv subject areas; ChemRxiv papers count as "chemistry").
    - Description (2–3 sentences: what the user studies, what a relevant paper reports) and Notes for the scorer, both taken from what the user said.
    - Avoid bare generic words that collide with other fields ("residue", "productivity", "CO2", "microbiome", "model"). They flood the shortlist.
+   - If the user gave only a sentence (or only a topic), build the topic and keyword groups from it. Spell out abbreviations and also keep the short forms (RBO → reverse beta-oxidation, plus RBO). `pipeline.autofill()` does the same thing headlessly for any blank topic, description or keyword list.
    - With an existing profile: move any `### Unsorted keywords` (added from the board) into proper groups, and pad thin groups with synonyms. **Never remove a term the user wrote.** Say in one line what you added or moved.
 2. Run it: `python3 "$S/pipeline.py" --profile <workspace>/profiles/<slug>.md` (options: `--days 14`, `--sources biorxiv,chemrxiv`, `--top 40`, `--no-claude`). It prints the board path.
 3. Show it. Start the server if it isn't running and open the board URL (`http://localhost:8780/digests/<dir>/board.html`). Summarise: abstracts screened per database → keyword matches → scored, the High papers with one line each, and any Medium worth a look. In a quiet week, say so plainly.

@@ -7,7 +7,7 @@ Tell it what you research (a few keywords are enough). Every week it screens **e
 - **Triage columns:** High relevance, Medium (worth a check) and Low. Each card shows Claude's one-line reason, tags, the abstract and your own notes.
 - **Vaults:** drag cards into *Must read*, *Methods & protocols*, *Background* or your own vaults. **Discard all** clears the Low column in one click.
 - **Download:** one zip of PDFs with a folder per vault, plus a README and a `references.bib` for Zotero, Mendeley or EndNote.
-- **Your research profile** is a plain Markdown file you can edit in the board or by hand. Claude fills in a blank topic and description from your keywords and suggests synonyms, and never deletes your words.
+- **Your research profile** is a plain Markdown file you can edit in the board or by hand. Start from keywords or just a sentence like *"collect all the bacteria that use RBO to produce MCFA"*. Claude fills in whatever is blank (topic, description, keyword groups) and suggests synonyms, and never deletes your words.
 
 Works for any field. There is nothing to install beyond Python 3.9+ (standard library only) and Claude Code.
 
