@@ -1,0 +1,14 @@
+{
+  "name": "litvault",
+  "description": "LitVault: a weekly preprint digest skill for Claude Code (bioRxiv, medRxiv, ChemRxiv).",
+  "owner": {
+    "name": "Xu Chen"
+  },
+  "plugins": [
+    {
+      "name": "litvault",
+      "source": "./",
+      "description": "Weekly bioRxiv / medRxiv / ChemRxiv literature digest with a drag-and-drop vault board."
+    }
+  ]
+}

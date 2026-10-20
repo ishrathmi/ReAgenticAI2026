@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# personal data, if someone runs LitVault inside a clone of this repo
+profiles/
+digests/

@@ -1,0 +1,1091 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f5f1; --panel:#ffffff; --panel-2:#fbfaf7; --ink:#1d1f1c; --muted:#6b6f68; --line:#e4e2db;
+  --accent:#2f6b4f; --accent-soft:#e3efe8;
+  --high:#2f7d4f; --high-soft:#e2f2e8; --med:#b07a12; --med-soft:#fbf0d9; --low:#8a8f88; --low-soft:#eeefec;
+  --vault:#3b5b8a; --vault-soft:#e6edf7; --drop:#dbe8fb;
+  --shadow:0 1px 2px rgba(0,0,0,.05),0 2px 8px rgba(0,0,0,.04); --lift:0 18px 40px rgba(20,30,20,.22),0 4px 10px rgba(0,0,0,.08);
+  --dock-bg:rgba(255,255,255,.92);
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141613; --panel:#1c1f1b; --panel-2:#20231f; --ink:#e8e9e4; --muted:#9a9f97; --line:#30342e;
+  --accent:#7cc39c; --accent-soft:#1f3329;
+  --high:#73c793; --high-soft:#1d3326; --med:#e0b259; --med-soft:#3a2f17; --low:#9aa097; --low-soft:#262924;
+  --vault:#8fb0e0; --vault-soft:#1f2a3b; --drop:#203450;
+  --shadow:0 1px 2px rgba(0,0,0,.4); --lift:0 18px 40px rgba(0,0,0,.6); --dock-bg:rgba(28,31,27,.94);
+}}
+:root[data-theme="dark"]{
+  --bg:#141613; --panel:#1c1f1b; --panel-2:#20231f; --ink:#e8e9e4; --muted:#9a9f97; --line:#30342e;
+  --accent:#7cc39c; --accent-soft:#1f3329;
+  --high:#73c793; --high-soft:#1d3326; --med:#e0b259; --med-soft:#3a2f17; --low:#9aa097; --low-soft:#262924;
+  --vault:#8fb0e0; --vault-soft:#1f2a3b; --drop:#203450;
+  --shadow:0 1px 2px rgba(0,0,0,.4); --lift:0 18px 40px rgba(0,0,0,.6); --dock-bg:rgba(28,31,27,.94);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 Inter,system-ui,sans-serif;padding-bottom:120px}
+body.is-dragging, body.is-dragging *{user-select:none;-webkit-user-select:none;cursor:grabbing!important}
+header{padding:22px 24px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+.eyebrow{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+h1{font:600 26px/1.2 "Source Serif 4",Georgia,serif;margin:4px 0 10px}
+.stats{display:flex;flex-wrap:wrap;gap:8px 18px;color:var(--muted);font-size:13px}
+.stats b{color:var(--ink);font-weight:600}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 24px;position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.toolbar input[type=search]{flex:1 1 220px;min-width:0;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font:inherit}
+button{font:inherit;font-size:13px;padding:7px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--accent)}
+.tip{font-size:12px;color:var(--muted);width:100%}
+kbd{font:600 11px Inter,sans-serif;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--panel)}
+main{padding:18px 24px 40px;display:grid;gap:22px}
+.section-title{display:flex;align-items:baseline;gap:10px;margin:0 0 10px;flex-wrap:wrap}
+.section-title h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;margin:0;color:var(--muted)}
+.section-title span{font-size:12px;color:var(--muted)}
+.lanes{display:grid;gap:14px;grid-template-columns:repeat(3,minmax(0,1fr))}
+.vaults{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+.lane{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;display:flex;flex-direction:column;min-height:140px;transition:background .15s,border-color .15s,box-shadow .15s}
+.lane-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.dot{width:9px;height:9px;border-radius:50%;flex:none}
+.lane-head .name{font-weight:600}
+.lane-head .hint{color:var(--muted);font-size:12px}
+.count{margin-left:auto;font-size:12px;color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:1px 8px}
+.lane-head [contenteditable]{outline:none;border-radius:4px;padding:0 2px;cursor:text}
+.lane-head [contenteditable]:focus{background:var(--panel);box-shadow:0 0 0 2px var(--vault-soft)}
+.lane-head .x{border:none;background:none;color:var(--muted);padding:2px 6px;border-radius:6px}
+.lane-head .x:hover{color:var(--ink);background:var(--panel)}
+.lane-head .x.armed{background:#c0392b;color:#fff;font-size:12px;font-weight:600}
+.section-title .dl{margin-left:auto;font-size:13px;font-weight:600;padding:6px 12px;border-radius:9px;background:var(--vault);border-color:var(--vault);color:var(--panel)}
+.section-title .dl:disabled{opacity:.5;cursor:default}
+.lane-act{font-size:12px;padding:3px 9px;border-radius:7px;white-space:nowrap}
+.lane-act:disabled{opacity:.45;cursor:default}
+.lane-act.danger{color:#c0392b;border-color:color-mix(in srgb,#c0392b 35%,var(--line))}
+.lane-act.danger:hover:not(:disabled){border-color:#c0392b}
+.lane-act.armed{background:#c0392b;border-color:#c0392b;color:#fff;font-weight:600}
+.lane-body{padding:10px;display:flex;flex-direction:column;gap:10px;flex:1;max-height:72vh;overflow:auto}
+/* vaults scroll like the triage columns (more specific than the narrow-screen .lane-body rule, so it applies there too) */
+.lane.vault .lane-body{max-height:60vh;min-height:90px}
+.lane-body{overscroll-behavior:contain}
+.lane.target{border-color:var(--vault);box-shadow:0 0 0 3px var(--vault-soft);background:var(--drop)}
+.empty{color:var(--muted);font-size:12px;text-align:center;padding:18px 6px;border:1px dashed var(--line);border-radius:8px}
+.lane[data-tier=high] .dot,.bin[data-lane=high] .dot{background:var(--high)}
+.lane[data-tier=medium] .dot{background:var(--med)} .lane[data-tier=low] .dot{background:var(--low)}
+.lane.vault .dot,.bin .dot{background:var(--vault)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 12px;box-shadow:var(--shadow);cursor:grab;touch-action:pan-y;transition:box-shadow .15s,transform .15s,border-color .15s;outline:none}
+.card:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--line));box-shadow:0 2px 6px rgba(0,0,0,.06),0 6px 16px rgba(0,0,0,.05)}
+.card:focus-visible{box-shadow:0 0 0 3px var(--accent-soft);border-color:var(--accent)}
+.card.arrived{animation:arrive .5s ease}
+@keyframes arrive{0%{transform:scale(.96);box-shadow:0 0 0 4px var(--vault-soft)}100%{transform:none}}
+.card .top{display:flex;gap:8px;align-items:flex-start}
+.grip{flex:none;color:var(--muted);opacity:.45;font-size:14px;line-height:22px;margin-left:auto;letter-spacing:-2px}
+.card:hover .grip{opacity:.9}
+.score{flex:none;min-width:38px;text-align:center;font-weight:700;font-size:13px;border-radius:7px;padding:3px 0}
+.score.high{background:var(--high-soft);color:var(--high)} .score.medium{background:var(--med-soft);color:var(--med)} .score.low{background:var(--low-soft);color:var(--low)}
+.card h3{font:600 14.5px/1.3 "Source Serif 4",Georgia,serif;margin:0}
+.card h3 a{color:inherit;text-decoration:none} .card h3 a:hover{text-decoration:underline}
+.meta{color:var(--muted);font-size:12px;margin-top:5px}
+.reason{margin:8px 0 0;font-size:13px;border-left:3px solid var(--accent-soft);padding-left:8px}
+.tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.tag{font-size:11px;background:var(--accent-soft);color:var(--accent);border-radius:99px;padding:1px 8px}
+.card-foot{display:flex;align-items:center;gap:6px;margin-top:8px}
+.card-foot button{font-size:12px;padding:3px 8px}
+.abstract{display:none;margin-top:8px;font-size:13px;background:var(--panel-2);border-radius:8px;padding:8px 10px}
+.card.open .abstract{display:block}
+.note{width:100%;margin-top:8px;font:inherit;font-size:12.5px;border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--panel-2);color:var(--ink);resize:vertical;display:none}
+.card.open .note,.note.has{display:block}
+.hidden{display:none!important}
+.placeholder{border:2px dashed var(--vault);border-radius:10px;background:var(--vault-soft);transition:height .12s}
+.ghost{position:fixed;left:0;top:0;z-index:50;pointer-events:none;box-shadow:var(--lift);border-color:var(--accent);cursor:grabbing;will-change:transform}
+.ghost.flying{transition:transform .24s cubic-bezier(.2,.7,.3,1),opacity .24s}
+.addvault{display:flex;align-items:center;justify-content:center;border:1px dashed var(--line);border-radius:12px;color:var(--muted);min-height:140px;background:transparent}
+/* dock: always-visible vault drop targets */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--dock-bg);backdrop-filter:blur(8px);border-top:1px solid var(--line);padding:10px 24px;transition:padding .18s,box-shadow .18s}
+.dock-label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:6px}
+.dock-row{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 4px;scrollbar-width:thin}
+.bin{flex:none;min-width:140px;display:flex;align-items:center;gap:8px;padding:9px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--panel);cursor:pointer;transition:transform .15s,border-color .15s,background .15s,padding .18s}
+.bin .bname{font-weight:600;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+.bin .bcount{margin-left:auto;font-size:12px;color:var(--muted)}
+.bin .key{font:600 10px Inter,sans-serif;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.bin.new{border-style:dashed;color:var(--muted);position:sticky;right:0;background:var(--panel);box-shadow:-10px 0 12px -4px var(--dock-bg)}
+body.is-dragging .dock{padding-top:14px;padding-bottom:18px;box-shadow:0 -10px 30px rgba(0,0,0,.08)}
+body.is-dragging .bin{padding:16px 16px;border-style:dashed;border-color:var(--vault)}
+.bin.hot{transform:translateY(-4px) scale(1.05);background:var(--drop);border-style:solid!important;border-color:var(--vault)!important}
+.bin.pulse{animation:pulse .5s ease}
+@keyframes pulse{0%{transform:scale(1)}40%{transform:scale(1.12);background:var(--drop)}100%{transform:scale(1)}}
+.toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);opacity:0;z-index:30;background:var(--ink);color:var(--bg);border-radius:10px;padding:9px 12px 9px 14px;display:flex;gap:12px;align-items:center;font-size:13px;transition:opacity .2s,transform .2s;pointer-events:none;max-width:calc(100vw - 32px)}
+.toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{background:transparent;color:var(--bg);border-color:color-mix(in srgb,var(--bg) 40%,transparent);padding:3px 10px}
+@media (max-width:900px){.lanes{grid-template-columns:1fr}.lane-body{max-height:none}}
+@media (max-width:600px){header,.toolbar,main,.dock{padding-left:16px;padding-right:16px}h1{font-size:22px}.bin{min-width:120px}}
+/* research profile: keyword bar + editor */
+.profile{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 24px 16px}
+.qa-label{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:6px}
+.qa-label{flex-wrap:wrap}
+.qa-label .file{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;text-transform:none;letter-spacing:0;font-weight:500;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:var(--panel-2);border:1px solid var(--line);border-radius:5px;padding:0 6px}
+.dirty{display:none;text-transform:none;letter-spacing:0;font-weight:600;color:var(--med);font-size:12px}
+.profile.is-dirty .dirty{display:inline}
+.qa-bar{display:flex;gap:8px;align-items:stretch;border:1.5px solid var(--line);border-radius:12px;background:var(--panel-2);padding:6px;transition:border-color .15s,box-shadow .15s}
+.qa-bar:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.qa-bar textarea{flex:1;min-width:0;border:none;background:transparent;color:var(--ink);font:inherit;font-size:15px;resize:none;outline:none;padding:7px 8px;line-height:1.4;max-height:160px;overflow:hidden;height:36px}
+.qa-bar textarea::placeholder{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qa-bar select{font:inherit;font-size:12.5px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);padding:0 8px;max-width:190px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--panel);font-weight:600}
+.psummary{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-top:8px;font-size:12.5px;color:var(--muted)}
+.psummary b{color:var(--ink)}
+.psummary .sp{flex:1}
+.psummary button{font-size:12.5px;padding:5px 10px}
+.qa-label select{text-transform:none;letter-spacing:0;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink);border:1px solid var(--line);border-radius:7px;background:var(--panel);padding:3px 8px;max-width:340px}
+.runbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--panel-2);font-size:13px;color:var(--muted)}
+.srcs{display:inline-flex;flex-wrap:wrap;gap:6px}
+.src{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:4px 10px;color:var(--ink);cursor:pointer;user-select:none}
+.src input{accent-color:var(--accent);margin:0}
+.src:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.srcbadge{font-size:10.5px;font-weight:600;letter-spacing:.02em;border-radius:5px;padding:0 5px;margin-right:4px;background:var(--panel-2);border:1px solid var(--line);color:var(--muted)}
+.srcbadge.chemrxiv{color:#8a4fbf;border-color:color-mix(in srgb,#8a4fbf 35%,var(--line))}
+.srcbadge.medrxiv{color:#2b6cb0;border-color:color-mix(in srgb,#2b6cb0 35%,var(--line))}
+.runbar input[type=number],.runbar select{font:inherit;font-size:13px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);padding:4px 6px}
+.runbar input[type=number]{width:56px}
+.runbar .sp{flex:1}
+button.run{background:var(--accent);border-color:var(--accent);color:var(--panel);font-weight:600;font-size:14px;padding:9px 16px;border-radius:10px}
+button.run:disabled{opacity:.55;cursor:not-allowed}
+.runbox{margin-top:10px;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:12px 14px}
+.runbox.hidden{display:none}
+.runbox ol{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.runbox li{display:flex;gap:10px;align-items:baseline;font-size:13px}
+.runbox .ic{width:18px;flex:none;text-align:center;font-weight:700}
+.runbox .lbl{font-weight:600;min-width:170px}
+.runbox .det{color:var(--muted)}
+.runbox li.pending .lbl{color:var(--muted);font-weight:500}
+.runbox li.done .ic{color:var(--high)} .runbox li.skipped .ic{color:var(--med)} .runbox li.error .ic{color:#c0392b}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--accent-soft);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.runbox .err{margin-top:8px;color:#c0392b;font-size:13px}
+.notice{margin-top:10px;font-size:13px;border-radius:10px;padding:8px 12px;background:var(--med-soft);color:var(--ink)}
+.notice.hidden{display:none}
+.stats .warn{color:var(--med);font-weight:600}
+.peditor{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;margin-top:14px}
+.peditor.hidden{display:none}
+.pcol{display:flex;flex-direction:column;gap:14px;min-width:0}
+.field label,.field .flabel{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px}
+.field input[type=text],.field textarea{width:100%;font:inherit;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);color:var(--ink);padding:7px 10px}
+.field textarea{resize:vertical;min-height:64px}
+.groups{display:grid;gap:10px}
+.group{border:1px solid var(--line);border-radius:10px;background:var(--panel-2);padding:10px}
+.group-head{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.group-head input{flex:1;min-width:0;font:inherit;font-weight:600;border:1px solid transparent;border-radius:6px;background:transparent;color:var(--ink);padding:3px 6px}
+.group-head input:hover,.group-head input:focus{border-color:var(--line);background:var(--panel);outline:none}
+.group-head select{font:inherit;font-size:12px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);padding:3px 6px}
+.group-head .gdel{border:none;background:none;color:var(--muted);padding:2px 6px}
+.group.unsorted{border-style:dashed;border-color:var(--med)}
+.chips{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:3px;font-size:12px;background:var(--accent-soft);color:var(--accent);border-radius:99px;padding:2px 4px 2px 9px}
+.chip.fresh{animation:chipin .25s ease}
+.chip.neg{background:var(--low-soft);color:var(--ink)}
+.chip.cat{background:var(--vault-soft);color:var(--vault)}
+.chip button{border:none;background:none;color:inherit;opacity:.6;padding:0 4px;font-size:13px;line-height:1}
+.chip button:hover{opacity:1}
+@keyframes chipin{from{transform:scale(.8);box-shadow:0 0 0 3px var(--accent-soft)}}
+.chips input{flex:1 0 120px;min-width:100px;font:inherit;font-size:12.5px;border:1px dashed var(--line);border-radius:99px;background:transparent;color:var(--ink);padding:3px 10px;outline:none}
+.chips input:focus{border-style:solid;border-color:var(--accent)}
+.addgroup{border-style:dashed;color:var(--muted);width:100%}
+.mdbox{display:flex;flex-direction:column;min-height:0}
+.mdbox textarea{flex:1;min-height:420px;width:100%;font:12.5px/1.5 ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);color:var(--ink);padding:10px 12px;resize:vertical;tab-size:2}
+.mdbox .hint{font-size:12px;color:var(--muted);margin-top:8px}
+.mdbox .hint code{font-family:ui-monospace,Menlo,monospace;background:var(--panel-2);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.mdactions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.mdactions button{font-size:12.5px;padding:5px 10px}
+@media (max-width:900px){.peditor{grid-template-columns:1fr}.mdbox textarea{min-height:260px}}
+@media (max-width:600px){.profile{padding-left:16px;padding-right:16px}.qa-bar{flex-wrap:wrap}.qa-bar textarea{flex-basis:100%}.qa-bar select{flex:1;max-width:none;padding:6px 8px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">Literature Vault · <span id="server"></span></div>
+  <h1 id="topic"></h1>
+  <div class="stats" id="stats"></div>
+</header>
+<section class="profile" id="profile">
+  <div class="qa-label">Research interest <select id="p-switch" aria-label="Research topic" class="hidden"></select><span class="file" id="p-file"></span><span class="dirty">● unsaved changes</span></div>
+  <div class="qa-bar">
+    <textarea id="qa-input" rows="1" placeholder="Type keywords separated by commas, or a sentence about what you study — then press Enter"></textarea>
+    <select id="qa-target" aria-label="Where to add"></select>
+    <button id="qa-add" class="primary">Add</button>
+  </div>
+  <div class="psummary">
+    <span id="p-summary"></span><span class="sp"></span>
+    <button id="p-toggle" aria-expanded="false">Edit profile ▾</button>
+    <button id="p-save">Save .md</button>
+  </div>
+  <div class="runbar">
+    <span>Search the last</span><input type="number" id="p-days" min="1" max="90" aria-label="Days"><span>days of</span>
+    <span class="srcs" id="p-srcs" role="group" aria-label="Databases to search">
+      <label class="src"><input type="checkbox" value="biorxiv">bioRxiv</label>
+      <label class="src"><input type="checkbox" value="medrxiv">medRxiv</label>
+      <label class="src"><input type="checkbox" value="chemrxiv">ChemRxiv</label>
+    </span>
+    <span class="sp"></span>
+    <button id="p-run" class="run">▶ Start literature retrieval</button>
+  </div>
+  <div class="runbox hidden" id="runbox"><ol id="run-steps"></ol><div class="err" id="run-err"></div></div>
+  <div class="notice hidden" id="p-notice"></div>
+  <div class="peditor hidden" id="peditor">
+    <div class="pcol">
+      <div class="field"><label for="p-topic">Topic</label><input type="text" id="p-topic" placeholder="Leave blank and Claude will name it from your keywords"></div>
+      <div class="field"><label for="p-desc">Description — what you work on and what a relevant paper looks like</label><textarea id="p-desc" rows="3" placeholder="Leave blank and Claude will write it from your keywords"></textarea></div>
+      <div class="field"><span class="flabel">Keyword groups — one group per facet of the topic; weight says how much a match counts</span>
+        <div class="groups" id="p-groups"></div>
+        <button class="addgroup" id="p-addgroup">+ Add keyword group</button>
+      </div>
+      <div class="field"><span class="flabel">Exclude — terms that mark a paper as off-topic</span><div class="chips" id="p-neg"></div></div>
+      <div class="field"><span class="flabel">Preferred categories (bioRxiv/medRxiv subject areas; ChemRxiv papers count as "chemistry")</span><div class="chips" id="p-cats"></div></div>
+      <div class="field"><label for="p-notes">Notes for the scorer — read by the agent when judging each abstract</label><textarea id="p-notes" rows="3"></textarea></div>
+    </div>
+    <div class="mdbox">
+      <span class="flabel" style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px">Profile file (Markdown) — edit here or in the form; both stay in sync</span>
+      <textarea id="p-md" spellcheck="false" aria-label="Profile Markdown"></textarea>
+      <div class="mdactions">
+        <button id="p-save2" class="primary">Save .md</button>
+        <button id="p-copy">Copy Markdown</button>
+        <button id="p-load">Load .md…</button>
+        <button id="p-revert">Revert to file</button>
+        <input type="file" id="p-file-input" accept=".md,text/markdown,text/plain" hidden>
+      </div>
+      <div class="hint" id="p-hint"></div>
+    </div>
+  </div>
+  <datalist id="cat-list"></datalist>
+</section>
+<div class="toolbar">
+  <input type="search" id="q" placeholder="Filter cards by title, author, tag…">
+  <button id="exp-md">Export Markdown</button>
+  <button id="exp-bib">Export BibTeX</button>
+  <button id="exp-json">Export JSON</button>
+  <button id="reset" title="Put every card back into its scored tier">Reset</button>
+  <button id="theme" title="Toggle light/dark">◐</button>
+  <div class="tip">Drag a card onto a vault in the dock below, or between columns to reorder. Shortcut: hover a card and press <kbd>1</kbd>–<kbd>9</kbd> to file it, <kbd>0</kbd> to send it back. On touch, press and hold to pick a card up.</div>
+</div>
+<main>
+  <section>
+    <div class="section-title"><h2>Triage</h2><span>scored by relevance</span></div>
+    <div class="lanes" id="lanes"></div>
+  </section>
+  <section>
+    <div class="section-title"><h2>Your vaults</h2><span>click a vault name to rename it · click ✕ twice to delete (Undo available)</span><button id="dl-vaults" class="dl" title="Download the PDFs of every paper in your vaults (except Discard) as a zip, one folder per vault">⬇ Download vaults</button></div>
+    <div class="vaults" id="vaults"></div>
+  </section>
+</main>
+<nav class="dock" id="dock" aria-label="Vaults">
+  <div class="dock-label" id="dock-label">Vaults</div>
+  <div class="dock-row" id="dock-row"></div>
+</nav>
+<div class="toast" id="toast" role="status"><span id="toast-msg"></span><button id="undo">Undo</button></div>
+<script id="digest" type="application/json">/*__DIGEST_DATA__*/null</script>
+<script>
+const D = JSON.parse(document.getElementById('digest').textContent);
+const KEY = 'litvault:' + D.id;
+const TIERS = [
+  {id:'high', name:'High relevance', hint:'≥ ' + D.thresholds.high},
+  {id:'medium', name:'Medium · check', hint:D.thresholds.medium + '–' + (D.thresholds.high-1)},
+  {id:'low', name:'Low relevance', hint:'< ' + D.thresholds.medium},
+];
+const byId = Object.fromEntries(D.papers.map(p => [p.id, p]));
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+// preprint databases (same names as scripts/sources.py)
+const SRC_LABEL = {biorxiv:'bioRxiv', medrxiv:'medRxiv', chemrxiv:'ChemRxiv'};
+const parseSources = v => { const out = [...new Set((Array.isArray(v) ? v : String(v || '').split(/[,;\s]+/)).map(x => x.trim().toLowerCase()).filter(x => SRC_LABEL[x]))]; return out.length ? out : ['biorxiv'] };
+
+function load(){ try { return JSON.parse(localStorage.getItem(KEY)) } catch(e){ return null } }
+function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)) } catch(e){} }
+function fresh(){ return {vaults: D.vaults.map((n,i) => ({id:'v'+i, name:n})), place:{}, notes:{}, order:{}} }
+let S = load() || fresh();
+const where = id => S.place[id] || byId[id].tier;
+const laneBody = id => $(`.lane[data-lane="${id}"] .lane-body`);
+const cardOf = id => $(`.card[data-id="${CSS.escape(id)}"]`);
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function shortAuthors(a){ const xs = a.split(';').map(s=>s.trim()).filter(Boolean); return xs.length > 3 ? xs.slice(0,3).join(', ') + ' et al.' : xs.join(', ') }
+
+$('#topic').textContent = D.topic || 'New research topic';
+$('#server').textContent = D.empty ? 'no retrieval yet' : D.server + ' · ' + D.start + ' → ' + D.end;
+const cnt = t => D.papers.filter(p => p.tier === t).length;
+$('#stats').innerHTML = D.empty
+  ? `<span>Describe your research interest below, then press <b>Start literature retrieval</b>.</span>`
+  : `<span><b>${D.screened.toLocaleString()}</b> abstracts screened → <b>${D.matched}</b> keyword matches → <b>${D.reviewed}</b> ${D.scoring === 'keywords' ? 'keyword-scored' : 'read &amp; scored by Claude'}</span>` +
+    `<span><b>${cnt('high')}</b> high · <b>${cnt('medium')}</b> medium · <b>${cnt('low')}</b> low</span>` +
+    (D.scoring_note ? `<span class="warn">${esc(D.scoring_note)}</span>` : '');
+
+/* ---------- rendering ---------- */
+function laneEl(id, name, hint, isVault){
+  const el = document.createElement('div');
+  el.className = 'lane' + (isVault ? ' vault' : '');
+  el.dataset.lane = id; if(!isVault) el.dataset.tier = id;
+  el.innerHTML = `<div class="lane-head"><span class="dot"></span>` +
+    (isVault ? `<span class="name" contenteditable="plaintext-only" spellcheck="false">${esc(name)}</span>`
+             : `<span class="name">${esc(name)}</span><span class="hint">${esc(hint)}</span>`) +
+    `<span class="count">0</span>` +
+    (id === 'low' ? `<button class="lane-act" data-act="discard-all" title="Move every card in this column to the Discard vault">Discard all</button>` : '') +
+    (isVault && isDiscard(name) ? `<button class="lane-act danger" data-act="delete-all" title="Permanently remove every paper in this vault from the board">Delete all</button>` : '') +
+    (isVault ? `<button class="x" title="Delete vault">✕</button>` : '') +
+    `</div><div class="lane-body"></div>`;
+  el.querySelector('[data-act="discard-all"]')?.addEventListener('click', discardAllLow);
+  const del = el.querySelector('[data-act="delete-all"]');
+  if(del) del.onclick = () => {
+    const n = laneBody(id).querySelectorAll('.card').length; if(!n) return;
+    // two-step: first click arms, second click within 4 s deletes
+    if(!del.classList.contains('armed')){
+      del.classList.add('armed'); del.textContent = `Delete ${n} paper${n > 1 ? 's' : ''}?`;
+      clearTimeout(del._t); del._t = setTimeout(() => { del.classList.remove('armed'); del.textContent = 'Delete all' }, 4000);
+      return;
+    }
+    deleteAllIn(id);
+  };
+  if(isVault){
+    const nm = el.querySelector('.name');
+    nm.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); nm.blur() } });
+    nm.addEventListener('blur', () => {
+      const v = S.vaults.find(v => v.id === id), was = isDiscard(v.name);
+      v.name = nm.textContent.trim() || 'Untitled'; save();
+      if(was !== isDiscard(v.name)) render(); else renderDock();  // show/hide its "Delete all" button
+    });
+    const x = el.querySelector('.x');
+    x.onclick = () => {
+      // two-step delete: first click arms the button, second click within 3 s deletes
+      if(!x.classList.contains('armed')){
+        x.classList.add('armed'); x.textContent = 'Delete?';
+        clearTimeout(x._t); x._t = setTimeout(() => { x.classList.remove('armed'); x.textContent = '✕' }, 3000);
+        return;
+      }
+      const name = laneName(id);
+      undoSnap = snapshot();
+      S.vaults = S.vaults.filter(v => v.id !== id);
+      for(const k in S.place) if(S.place[k] === id) delete S.place[k];
+      delete S.order[id];
+      save(); render(); toast(`Deleted vault “${name}” — its cards went back to triage`);
+    };
+  }
+  return el;
+}
+
+function cardEl(p){
+  const c = document.createElement('article');
+  c.className = 'card'; c.tabIndex = 0; c.dataset.id = p.id;
+  c.dataset.search = (p.title + ' ' + p.authors + ' ' + p.tags.join(' ') + ' ' + p.category + ' ' + p.abstract).toLowerCase();
+  const note = S.notes[p.id] || '';
+  c.innerHTML = `<div class="top"><span class="score ${p.tier}" title="Relevance score (0–100)">${p.score}</span>
+    <h3><a href="${esc(p.url)}" target="_blank" rel="noopener" draggable="false">${esc(p.title)}</a></h3><span class="grip" aria-hidden="true">⋮⋮</span></div>
+    <div class="meta">${esc(shortAuthors(p.authors))}${p.corr ? ' · ' + esc(p.corr) : ''}<br><span class="srcbadge ${esc(p.source || '')}">${esc(SRC_LABEL[p.source] || 'bioRxiv')}</span>${esc(p.date)} · ${esc(p.category)}</div>
+    ${p.reason ? `<p class="reason">${esc(p.reason)}</p>` : ''}
+    ${p.tags.length ? `<div class="tags">${p.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}</div>` : ''}
+    <div class="abstract">${esc(p.abstract)}</div>
+    <textarea class="note${note ? ' has' : ''}" placeholder="Your note…">${esc(note)}</textarea>
+    <div class="card-foot"><button class="toggle">Abstract &amp; note</button></div>`;
+  c.querySelector('.toggle').onclick = () => c.classList.toggle('open');
+  const ta = c.querySelector('.note');
+  ta.addEventListener('input', () => { S.notes[p.id] = ta.value; ta.classList.toggle('has', !!ta.value); save() });
+  c.addEventListener('pointerdown', onPointerDown);
+  c.addEventListener('mouseenter', () => hovered = c);
+  c.addEventListener('mouseleave', () => { if(hovered === c) hovered = null });
+  return c;
+}
+
+function renderDock(){
+  const row = $('#dock-row'); row.innerHTML = '';
+  S.vaults.forEach((v, i) => {
+    const b = document.createElement('div');
+    b.className = 'bin'; b.dataset.lane = v.id; b.title = 'Drop here · click to jump to this vault';
+    b.innerHTML = `<span class="dot"></span><span class="bname">${esc(v.name)}</span>${i < 9 ? `<span class="key">${i+1}</span>` : ''}<span class="bcount">0</span>`;
+    b.onclick = () => $(`.lane[data-lane="${v.id}"]`).scrollIntoView({behavior:'smooth', block:'center'});
+    row.appendChild(b);
+  });
+  const nb = document.createElement('div');
+  nb.className = 'bin new'; nb.dataset.lane = '__new'; nb.innerHTML = `<span>+ New vault</span>`;
+  nb.title = 'Drop a card here to file it in a new vault';
+  nb.onclick = () => { const v = newVault(); render(); focusRename(v.id) };
+  row.appendChild(nb);
+  counts();
+}
+
+function render(){
+  const lanes = $('#lanes'), vaults = $('#vaults');
+  lanes.innerHTML = ''; vaults.innerHTML = '';
+  TIERS.forEach(t => lanes.appendChild(laneEl(t.id, t.name, t.hint, false)));
+  S.vaults.forEach(v => vaults.appendChild(laneEl(v.id, v.name, '', true)));
+  const add = document.createElement('button'); add.className = 'addvault'; add.textContent = '+ New vault';
+  add.onclick = () => { const v = newVault(); render(); focusRename(v.id) };
+  vaults.appendChild(add);
+  const valid = new Set([...TIERS.map(t => t.id), ...S.vaults.map(v => v.id)]);
+  const groups = {};
+  const gone = new Set(S.deleted || []);
+  D.papers.forEach(p => { if(gone.has(p.id)) return; let l = where(p.id); if(!valid.has(l)){ delete S.place[p.id]; l = p.tier } (groups[l] ||= []).push(p) });
+  for(const [l, ps] of Object.entries(groups)){
+    const ord = S.order[l] || [];
+    ps.sort((a, b) => { const ia = ord.indexOf(a.id), ib = ord.indexOf(b.id); return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib) || b.score - a.score });
+    ps.forEach(p => laneBody(l).appendChild(cardEl(p)));
+  }
+  renderDock(); filter();
+}
+
+function counts(){
+  $$('.lane').forEach(l => {
+    const body = l.querySelector('.lane-body'), n = body.querySelectorAll('.card:not(.hidden)').length;
+    l.querySelector('.count').textContent = n;
+    let em = body.querySelector('.empty');
+    const has = body.querySelector('.card,.placeholder');
+    const act = l.querySelector('.lane-act');
+    if(act){ const any = !!body.querySelector(act.dataset.act === 'discard-all' ? '.card:not(.hidden)' : '.card'); act.disabled = !any; if(!any){ act.classList.remove('armed'); act.textContent = act.dataset.act === 'discard-all' ? 'Discard all' : 'Delete all' } }
+    if(!has && !em){ em = document.createElement('div'); em.className = 'empty'; em.textContent = l.classList.contains('vault') ? 'Drop papers here' : D.empty ? 'Papers appear here after a retrieval' : 'Nothing here'; body.appendChild(em) }
+    else if(has && em) em.remove();
+  });
+  if(!dlBusy){
+    const n = dlVaults().reduce((k, v) => k + v.papers.length, 0), b = $('#dl-vaults');
+    b.disabled = !n; b.textContent = n ? `⬇ Download ${n} paper${n > 1 ? 's' : ''}` : '⬇ Download vaults';
+  }
+  $$('.bin[data-lane]').forEach(b => { const c = b.querySelector('.bcount'); if(c) c.textContent = laneBody(b.dataset.lane)?.querySelectorAll('.card').length ?? 0 });
+}
+
+function filter(){
+  const q = $('#q').value.trim().toLowerCase();
+  $$('.card').forEach(c => c.classList.toggle('hidden', !!q && !c.dataset.search.includes(q)));
+  counts();
+}
+$('#q').addEventListener('input', filter);
+
+const isDiscard = name => /^\s*discard/i.test(name || '');
+// the Discard vault: the first vault named "Discard…"; created if missing
+function discardVault(){
+  let v = S.vaults.find(v => isDiscard(v.name));
+  if(!v){ v = {id:'v' + Date.now(), name:'Discard'}; S.vaults.push(v); save() }
+  return v;
+}
+function discardAllLow(){
+  const ids = [...laneBody('low').querySelectorAll('.card:not(.hidden)')].map(c => c.dataset.id);  // respects the filter box
+  if(!ids.length) return;
+  undoSnap = snapshot();
+  const v = discardVault();
+  ids.forEach(id => S.place[id] = v.id);
+  S.order[v.id] = [...(S.order[v.id] || []).filter(x => !ids.includes(x)), ...ids];
+  save(); render(); pulse(v.id);
+  toast(`Moved ${ids.length} low-relevance paper${ids.length > 1 ? 's' : ''} to “${v.name}”`);
+}
+function deleteAllIn(id){
+  const ids = [...laneBody(id).querySelectorAll('.card')].map(c => c.dataset.id);
+  if(!ids.length) return;
+  undoSnap = snapshot();
+  S.deleted = [...new Set([...(S.deleted || []), ...ids])];
+  ids.forEach(x => { delete S.place[x]; delete S.notes[x] });
+  delete S.order[id];
+  save(); render();
+  toast(`Deleted ${ids.length} paper${ids.length > 1 ? 's' : ''} from this board`);
+}
+
+/* download every vault except Discard as a zip of PDFs, one folder per vault (needs serve.py) */
+let dlBusy = false;
+function dlVaults(){
+  return S.vaults.filter(v => !isDiscard(v.name)).map(v => ({name:v.name,
+    papers:[...(laneBody(v.id)?.querySelectorAll('.card') || [])].map(c => { const p = byId[c.dataset.id];
+      return {id:p.id, title:p.title, authors:p.authors, date:p.date, url:p.url, score:p.score, reason:p.reason, tags:p.tags, note:S.notes[p.id] || ''} })
+  })).filter(v => v.papers.length);
+}
+async function downloadVaults(){
+  const vaults = dlVaults(); if(!vaults.length || dlBusy) return;
+  if(!API){ toast('Downloading PDFs needs the LitVault server: ' + (D.serve_cmd || 'ask Claude to start LitVault'), null); return }
+  const b = $('#dl-vaults'); dlBusy = true; b.disabled = true;
+  try {
+    const {id, total} = await api('/api/download', {topic:D.topic, end:D.end, vaults});
+    let j;
+    for(;;){
+      j = await api('/api/download?id=' + id);
+      b.textContent = `Downloading ${j.done}/${total}…`;
+      if(j.ready || j.error) break;
+      await new Promise(r => setTimeout(r, 700));
+    }
+    if(j.error) throw new Error(j.error);
+    const a = document.createElement('a'); a.href = '/api/download/file?id=' + id; a.download = j.filename; document.body.appendChild(a); a.click(); a.remove();
+    const f = j.failed.length;
+    toast(`Downloaded ${j.ok} PDF${j.ok === 1 ? '' : 's'} in ${vaults.length} folder${vaults.length > 1 ? 's' : ''}` + (f ? ` · ${f} couldn't be fetched (link included)` : ''), null);
+  } catch(e){ toast('Download failed: ' + e.message, null) }
+  dlBusy = false; counts();
+}
+$('#dl-vaults').onclick = downloadVaults;
+
+function newVault(){
+  // native prompt() is blocked in many embedded browsers, so create with a default name and rename inline
+  const names = new Set(S.vaults.map(v => v.name)); let n = 'New vault', i = 2;
+  while(names.has(n)) n = 'New vault ' + i++;
+  const v = {id:'v' + Date.now(), name:n}; S.vaults.push(v); save(); return v;
+}
+function focusRename(id){
+  const nm = $(`.lane[data-lane="${id}"] .name`); if(!nm) return;
+  nm.closest('.lane').scrollIntoView({behavior:'smooth', block:'center'});
+  nm.focus({preventScroll:true});
+  const r = document.createRange(); r.selectNodeContents(nm);
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+}
+
+/* ---------- moving + undo ---------- */
+let undoSnap = null, toastTimer = null;
+function snapshot(){ return JSON.stringify({place:S.place, order:S.order, vaults:S.vaults, deleted:S.deleted || [], notes:S.notes}) }
+function laneName(id){ const t = TIERS.find(t => t.id === id); return t ? t.name : (S.vaults.find(v => v.id === id) || {}).name }
+function commit(pid, lane){
+  if(lane === byId[pid].tier) delete S.place[pid]; else S.place[pid] = lane;
+  $$('.lane').forEach(l => S.order[l.dataset.lane] = [...l.querySelectorAll('.card')].map(c => c.dataset.id));
+  save(); counts();
+}
+// toast(msg) offers the board's Undo; toast(msg, fn) offers fn as the undo action; toast(msg, null) has no Undo
+let undoFn = null;
+function toast(msg, fn){
+  undoFn = fn || null;
+  $('#undo').style.display = fn === null ? 'none' : '';
+  $('#toast-msg').textContent = msg; $('#toast').classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => $("#toast").classList.remove("show"), 7000);
+}
+$('#undo').onclick = () => {
+  if(undoFn){ const f = undoFn; undoFn = null; f(); $('#toast').classList.remove('show'); return }
+  if(!undoSnap) return; Object.assign(S, JSON.parse(undoSnap)); undoSnap = null; save(); render();
+  $('#toast').classList.remove('show');
+};
+function pulse(lane){
+  const b = $(`.bin[data-lane="${lane}"]`); if(!b) return;
+  b.classList.remove('pulse'); void b.offsetWidth; b.classList.add('pulse');
+}
+// file a card into a lane (used by drop-on-bin and keyboard shortcuts)
+function fileTo(pid, lane, before){
+  const from = where(pid); if(from === lane && !before) return;
+  undoSnap = snapshot();
+  const card = cardOf(pid), body = laneBody(lane);
+  body.insertBefore(card, before || null);
+  commit(pid, lane);
+  card.classList.remove('arrived'); void card.offsetWidth; card.classList.add('arrived');
+  if(from !== lane){ pulse(lane); toast(`Moved to “${laneName(lane)}”`) }
+}
+
+/* ---------- pointer drag ---------- */
+let hovered = null, pending = null, drag = null, raf = 0, lastXY = [0, 0];
+
+function onPointerDown(e){
+  if(e.pointerType === 'mouse' && e.button !== 0) return;
+  if(e.target.closest('button,textarea,input,select,[contenteditable]')) return;
+  const card = e.currentTarget;
+  if(e.pointerType === 'mouse' && e.target.closest('a')) e.preventDefault(); // stop native link-drag
+  pending = {card, x0:e.clientX, y0:e.clientY, touch:e.pointerType !== 'mouse'};
+  if(pending.touch){ const p = pending; p.timer = setTimeout(() => { if(pending === p) begin(p.x0, p.y0) }, 260) }
+  window.addEventListener('pointermove', onPointerMove);
+  window.addEventListener('pointerup', onPointerUp);
+  window.addEventListener('pointercancel', onPointerCancel);
+}
+
+function onPointerMove(e){
+  lastXY = [e.clientX, e.clientY];
+  if(pending && !drag){
+    const d = Math.hypot(e.clientX - pending.x0, e.clientY - pending.y0);
+    if(pending.touch){ if(d > 10){ clearTimeout(pending.timer); cleanupListeners(); pending = null } return }
+    if(d > 5) begin(e.clientX, e.clientY); else return;
+  }
+  if(drag){ e.preventDefault(); track(e.clientX, e.clientY) }
+}
+
+function begin(x, y){
+  const card = pending.card, r = card.getBoundingClientRect();
+  const ghost = card.cloneNode(true);
+  ghost.classList.add('ghost'); ghost.classList.remove('arrived');
+  ghost.style.width = r.width + 'px';
+  document.body.appendChild(ghost);
+  const ph = document.createElement('div'); ph.className = 'placeholder'; ph.style.height = r.height + 'px';
+  card.after(ph); card.classList.add('hidden');
+  drag = {card, id:card.dataset.id, ghost, ph, dx:x - r.left, dy:y - r.top, from:where(card.dataset.id), bin:null, lane:null};
+  pending = null;
+  document.body.classList.add('is-dragging');
+  $('#dock-label').textContent = 'Drop into a vault';
+  if(navigator.vibrate) try{ navigator.vibrate(8) }catch(_){}
+  track(x, y);
+  raf = requestAnimationFrame(autoScroll);
+}
+
+function track(x, y){
+  const {ghost, ph} = drag;
+  ghost.style.transform = `translate(${x - drag.dx}px, ${y - drag.dy}px) rotate(1.5deg)`;
+  const el = document.elementFromPoint(x, y);
+  const bin = el && el.closest('.bin');
+  if(bin !== drag.bin){ drag.bin?.classList.remove('hot'); bin?.classList.add('hot'); drag.bin = bin }
+  const lane = !bin && el && el.closest('.lane');
+  if(lane !== drag.lane){ drag.lane?.classList.remove('target'); if(lane) lane.classList.add('target'); drag.lane = lane || null }
+  if(lane){
+    const body = lane.querySelector('.lane-body');
+    const after = [...body.querySelectorAll('.card:not(.hidden)')].find(c => y < c.getBoundingClientRect().top + c.offsetHeight / 2);
+    if(after){ if(ph.nextElementSibling !== after) body.insertBefore(ph, after) }
+    else if(ph.parentElement !== body || ph.nextElementSibling) body.appendChild(ph);
+    body.querySelector('.empty')?.remove();
+  }
+  ph.style.opacity = bin ? .35 : 1;
+}
+
+function autoScroll(){
+  if(!drag) return;
+  const [x, y] = lastXY, dockTop = $('#dock').getBoundingClientRect().top, edge = 70;
+  let dy = 0;
+  if(y < edge + 50) dy = -Math.ceil((edge + 50 - y) / 5);
+  else if(y > dockTop - edge && y < dockTop) dy = Math.ceil((y - (dockTop - edge)) / 5);
+  if(dy){ window.scrollBy(0, dy); track(x, y) }
+  // scroll inside an overflowing lane body
+  const body = drag.lane?.querySelector('.lane-body');
+  if(body && body.scrollHeight > body.clientHeight){
+    const r = body.getBoundingClientRect();
+    if(y < r.top + 40) body.scrollTop -= 8; else if(y > r.bottom - 40) body.scrollTop += 8;
+  }
+  raf = requestAnimationFrame(autoScroll);
+}
+
+function flyTo(rect, scale, done){
+  const g = drag.ghost;
+  g.classList.add('flying');
+  g.style.transform = `translate(${rect.left}px, ${rect.top}px) scale(${scale})`;
+  if(scale < 1) g.style.opacity = '0';
+  let fin = false; const end = () => { if(fin) return; fin = true; g.remove(); done() };
+  g.addEventListener('transitionend', end, {once:true}); setTimeout(end, 320);
+}
+
+function onPointerUp(){
+  cleanupListeners();
+  if(pending){ clearTimeout(pending.timer); pending = null; return }
+  if(!drag) return;
+  justDragged = true; setTimeout(() => justDragged = false, 0); // the click fires right after pointerup
+  cancelAnimationFrame(raf);
+  const d = drag;
+  d.bin?.classList.remove('hot'); d.lane?.classList.remove('target');
+  if(d.bin){
+    let lane = d.bin.dataset.lane;
+    if(lane === '__new'){ const v = newVault(); d.ghost.remove(); render(); return endDrag(() => { fileTo(d.id, v.id); focusRename(v.id); toast('Filed in a new vault — type a name for it') }) }
+    const r = d.bin.getBoundingClientRect();
+    flyTo({left:r.left + r.width / 2 - d.ghost.offsetWidth * .1, top:r.top - 6}, .2, () => {
+      d.ph.remove(); d.card.classList.remove('hidden'); endDrag(); fileTo(d.id, lane);
+    });
+  } else if(d.ph.parentElement){
+    const lane = d.ph.closest('.lane').dataset.lane;
+    const r = d.ph.getBoundingClientRect();
+    flyTo({left:r.left, top:r.top}, 1, () => {
+      const before = d.ph.nextElementSibling;
+      d.ph.remove(); d.card.classList.remove('hidden'); endDrag();
+      if(lane === d.from){ laneBody(lane).insertBefore(d.card, before); commit(d.id, lane) }
+      else fileTo(d.id, lane, before);
+    });
+  } else finishInPlace(d);
+}
+function finishInPlace(d){ d.ghost.remove(); d.ph.remove(); d.card.classList.remove('hidden'); endDrag() }
+// a drag that starts on the title link must not also open the link when released
+let justDragged = false;
+document.addEventListener('click', e => { if(justDragged){ e.preventDefault(); e.stopPropagation(); justDragged = false } }, true);
+function endDrag(after){
+  document.body.classList.remove('is-dragging'); $('#dock-label').textContent = 'Vaults';
+  drag = null; counts(); after && after();
+}
+function onPointerCancel(){
+  cleanupListeners();
+  if(pending){ clearTimeout(pending.timer); pending = null }
+  if(drag){ cancelAnimationFrame(raf); const d = drag; d.bin?.classList.remove('hot'); d.lane?.classList.remove('target'); finishInPlace(d) }
+}
+function cleanupListeners(){
+  window.removeEventListener('pointermove', onPointerMove);
+  window.removeEventListener('pointerup', onPointerUp);
+  window.removeEventListener('pointercancel', onPointerCancel);
+}
+// stop the page from scrolling under a finger that is carrying a card
+document.addEventListener('touchmove', e => { if(drag) e.preventDefault() }, {passive:false});
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && drag){ onPointerCancel(); return }
+  if(e.target.closest && e.target.closest('input,textarea,[contenteditable]')) return;
+  const card = document.activeElement?.classList?.contains('card') ? document.activeElement : hovered;
+  if(!card || drag) return;
+  if(/^[1-9]$/.test(e.key)){ const v = S.vaults[+e.key - 1]; if(v){ e.preventDefault(); fileTo(card.dataset.id, v.id) } }
+  else if(e.key === '0'){ e.preventDefault(); fileTo(card.dataset.id, byId[card.dataset.id].tier) }
+});
+
+/* ---------- exports ---------- */
+function grouped(){
+  const ids = [...S.vaults.map(v => v.id), ...TIERS.map(t => t.id)];
+  return ids.map(id => ({lane: laneName(id), papers: [...document.querySelectorAll(`.lane[data-lane="${id}"] .card`)].map(c => byId[c.dataset.id])})).filter(g => g.papers.length);
+}
+function download(name, text, type){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const slug = D.topic.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40) + '_' + D.end;
+$('#exp-md').onclick = () => download(slug + '.md',
+  `# ${D.topic}\n${D.server} ${D.start} → ${D.end}\n\n` + grouped().map(g => `## ${g.lane}\n\n` + g.papers.map(p =>
+    `- **[${p.title}](${p.url})** (${p.score}) — ${shortAuthors(p.authors)}, ${p.date}\n  ${p.reason}` + (S.notes[p.id] ? `\n  > ${S.notes[p.id].replace(/\n/g, ' ')}` : '')).join('\n')).join('\n\n') + '\n', 'text/markdown');
+$('#exp-bib').onclick = () => download(slug + '.bib', grouped().flatMap(g => g.papers.map(p => {
+  const first = (p.authors.split(';')[0] || 'anon').split(',')[0].replace(/[^A-Za-z]/g, '');
+  return `@article{${first}${p.date.slice(0,4)}_${p.id.split('.').pop()},\n  title = {${p.title}},\n  author = {${p.authors.split(';').map(s => s.trim()).filter(Boolean).join(' and ')}},\n  journal = {${SRC_LABEL[p.source] || 'bioRxiv'}},\n  year = {${p.date.slice(0,4)}},\n  doi = {${p.id}},\n  url = {${p.url}},\n  keywords = {${g.lane}${p.tags.length ? ', ' + p.tags.join(', ') : ''}}\n}`;
+})).join('\n\n') + '\n', 'application/x-bibtex');
+$('#exp-json').onclick = () => download(slug + '.json', JSON.stringify({topic: D.topic, start: D.start, end: D.end,
+  vaults: grouped().map(g => ({vault: g.lane, papers: g.papers.map(p => ({doi: p.id, title: p.title, score: p.score, url: p.url, note: S.notes[p.id] || ''}))}))}, null, 2), 'application/json');
+$('#reset').onclick = () => { undoSnap = snapshot(); S.place = {}; S.order = {}; save(); render(); toast('All cards moved back to triage') };
+$('#theme').onclick = () => {
+  const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  r.dataset.theme = dark ? 'light' : 'dark';
+};
+render();
+
+/* ---------- research profile (.md) — keyword bar + editor ---------- */
+// Same format as scripts/profile_md.py; keep the two parsers in step.
+const CATS = ['chemistry', 'animal behavior and cognition','biochemistry','bioengineering','bioinformatics','biophysics','cancer biology','cell biology','clinical trials','developmental biology','ecology','epidemiology','evolutionary biology','genetics','genomics','immunology','microbiology','molecular biology','neuroscience','paleontology','pathology','pharmacology and toxicology','physiology','plant biology','scientific communication and education','synthetic biology','systems biology','zoology'];
+const WEIGHTS = [[4, '4 · core'], [3, '3 · high'], [2, '2 · medium'], [1, '1 · low']];
+const UNSORTED = 'Unsorted keywords';
+const PSECTIONS = {'description':'description','keywords':'concepts','concepts':'concepts','exclude':'negative','negative':'negative','excluded':'negative',
+  'preferred categories':'categories_boost','categories':'categories_boost','notes for the scorer':'notes','notes':'notes'};
+// split on , ; or newline — but keep commas between digits, as in "2,3-butanediol"
+const freshTerms = new Set(); // terms added since the last render get a short highlight
+const splitTerms = s => s.split(/;|\n|(?<!\d),|,(?!\d)/).map(t => t.trim()).filter(Boolean);
+
+function parseMd(text){
+  const P = {topic:'', description:'', concepts:[], negative:[], categories_boost:[], notes:''};
+  let lines = text.split(/\r?\n/);
+  if(lines[0]?.trim() === '---'){
+    const end = lines.findIndex((l, i) => i > 0 && l.trim() === '---');
+    lines.slice(1, end).forEach(l => {
+      const i = l.indexOf(':'); if(i < 0) return;
+      const k = l.slice(0, i).trim().toLowerCase(), v = l.slice(i + 1).trim();
+      if(k === 'sources' || k === 'server'){ P.sources = parseSources(v); return }  // `server:` in older files
+      P[k] = ['days','high','medium'].includes(k) && /^\d+$/.test(v) ? +v : k === 'vaults' ? v.split(',').map(x => x.trim()).filter(Boolean) : v;
+    });
+    lines = lines.slice(end + 1);
+  }
+  let sec = null, group = null, free = [];
+  const flush = () => { if((sec === 'description' || sec === 'notes') && free.length){ P[sec] = ((P[sec] ? P[sec] + '\n' : '') + free.join('\n')).trim() } free = [] };
+  for(const ln of lines){
+    const s = ln.trim();
+    if(s.startsWith('# ') && !P.topic) P.topic = s.slice(2).trim();
+    else if(s.startsWith('## ')){ flush(); sec = PSECTIONS[s.slice(3).trim().toLowerCase()] || null; group = null }
+    else if(s.startsWith('### ') && sec === 'concepts'){
+      const m = s.match(/^###\s+(.+?)\s*(?:\((?:weight|importance)\s*:?\s*([1-4])\))?\s*$/i);
+      group = {name:m[1].trim(), weight:+(m[2] || 2), terms:[]}; P.concepts.push(group);
+    }
+    else if(/^[-*+]\s+/.test(s) && ['concepts','negative','categories_boost'].includes(sec)){
+      const terms = splitTerms(s.replace(/^[-*+]\s+/, ''));
+      if(sec === 'concepts'){ if(!group){ group = {name:'Keywords', weight:2, terms:[]}; P.concepts.push(group) } group.terms.push(...terms) }
+      else P[sec].push(...terms);
+    }
+    else if(sec === 'description' || sec === 'notes') free.push(ln);
+  }
+  flush();
+  return P;
+}
+
+function renderMd(P, withDate = true){
+  const fm = ['---', `topic: ${P.topic || ''}`, `sources: ${parseSources(P.sources).join(', ')}`, `days: ${P.days ?? 7}`, `high: ${P.high ?? 70}`, `medium: ${P.medium ?? 40}`];
+  if(P.vaults?.length) fm.push('vaults: ' + P.vaults.join(', '));
+  if(withDate) fm.push('updated: ' + new Date().toISOString().slice(0, 10));
+  const out = [...fm, '---', `# ${P.topic || ''}`, '', '## Description', (P.description || '').trim(), '', '## Keywords'];
+  P.concepts.forEach(c => out.push(`### ${c.name} (weight: ${c.weight ?? 2})`, ...c.terms.map(t => '- ' + t), ''));
+  out.push('## Exclude', ...P.negative.map(t => '- ' + t), '');
+  out.push('## Preferred categories', ...P.categories_boost.map(t => '- ' + t), '');
+  out.push('## Notes for the scorer', (P.notes || '').trim(), '');
+  return out.join('\n');
+}
+
+// API: when the page is served by scripts/serve.py, saving and retrieval go through it
+const API = location.protocol.startsWith('http');
+const PKEY = 'litvault-profile:' + (D.profile_file || 'new');
+// same rule as slugify() in serve.py / pipeline.py
+const slugTopic = t => { const s = (t || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''); return s.length <= 60 ? s : s.slice(0, 60).replace(/-[^-]*$/, '') };
+// the file follows the topic: a renamed topic is saved as a new profile, the old file is kept
+const pFileName = () => (slugTopic(P.topic) || 'untitled') + '.md';
+let savedMd = D.profile_md || renderMd({topic:D.topic, description:'', concepts:[], negative:[], categories_boost:[], notes:''});
+// unsaved draft: only reused while the file it was based on is unchanged
+function loadDraft(){ try { const d = JSON.parse(localStorage.getItem(PKEY)); if(d && d.base === savedMd) return parseMd(d.md) } catch(e){} return null }
+let P = loadDraft() || parseMd(savedMd);
+const sameAsSaved = () => renderMd(P, false) === renderMd(parseMd(savedMd), false);
+
+function sync(from){
+  if(from !== 'md' && document.activeElement !== $('#p-md')) $('#p-md').value = renderMd(P);
+  if(from !== 'form') renderPForm();
+  try { localStorage.setItem(PKEY, JSON.stringify({base:savedMd, md:renderMd(P)})) } catch(e){}
+  $('#profile').classList.toggle('is-dirty', !sameAsSaved());
+  renderPSummary(); renderTargets(); renderTopic();
+}
+
+// page title, heading, file name and the "results are for another topic" notice follow the topic field
+function renderTopic(){
+  const t = P.topic.trim();
+  document.title = (t ? t + ' · ' : '') + 'Literature Vault';
+  $('#topic').textContent = t || 'New research topic';
+  $('#p-file').textContent = 'profiles/' + pFileName();
+  const n = $('#p-notice');
+  if(!D.empty && t && t !== D.topic){
+    n.innerHTML = `The papers below are for “${esc(D.topic)}”. Press <b>Start literature retrieval</b> to search for “${esc(t)}”.`;
+    n.classList.remove('hidden');
+  } else n.classList.add('hidden');
+  if(document.activeElement !== $('#p-days')) $('#p-days').value = P.days ?? 7;
+  const on = parseSources(P.sources);
+  $$('#p-srcs input').forEach(cb => cb.checked = on.includes(cb.value));
+  $('#p-hint').innerHTML = API
+    ? `Saved as <code>profiles/${esc(pFileName())}</code> in your LitVault folder. Claude reads the keywords, description and notes from it on every retrieval, and writes back any synonyms it adds.`
+    : `This page was opened as a file, so it can't write to your LitVault folder. Start the LitVault server to save and run retrievals from here: <code>${esc(D.serve_cmd || 'python3 <skill folder>/scripts/serve.py')}</code> (or ask Claude to start LitVault), then open <code>http://localhost:8780</code>.`;
+}
+
+function renderPSummary(){
+  const groups = P.concepts.filter(c => c.name !== UNSORTED), terms = groups.reduce((n, c) => n + c.terms.length, 0);
+  const uns = P.concepts.find(c => c.name === UNSORTED)?.terms.length || 0;
+  $('#p-summary').innerHTML = `<b>${groups.length}</b> keyword groups · <b>${terms}</b> terms · <b>${P.negative.length}</b> excluded · <b>${P.categories_boost.length}</b> categories` +
+    (uns ? ` · <b style="color:var(--med)">${uns}</b> unsorted` : '');
+}
+
+function renderTargets(){
+  const sel = $('#qa-target'), cur = sel.value || 'auto';
+  sel.innerHTML = `<option value="auto" title="Keyword lists go to Unsorted keywords; sentences go to the Description">Auto-sort</option>` +
+    P.concepts.map((c, i) => `<option value="g${i}">→ ${esc(c.name)}</option>`).join('') +
+    `<option value="neg">→ Exclude</option><option value="cat">→ Preferred categories</option><option value="desc">→ Description</option>`;
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'auto';
+}
+
+// chip list editor: Enter or comma adds, Backspace on empty removes the last chip
+function chipList(list, cls, fk, placeholder, datalist){
+  const wrap = document.createElement('div'); wrap.className = 'chips';
+  list.forEach((t, i) => {
+    const c = document.createElement('span'); c.className = 'chip ' + cls + (freshTerms.has(t) ? ' fresh' : '');
+    c.innerHTML = `${esc(t)}<button title="Remove" aria-label="Remove ${esc(t)}">×</button>`;
+    c.querySelector('button').onclick = () => { list.splice(i, 1); sync() };
+    wrap.appendChild(c);
+  });
+  const inp = document.createElement('input'); inp.placeholder = placeholder; inp.dataset.fk = fk;
+  if(datalist) inp.setAttribute('list', datalist);
+  const commit = () => { const add = splitTerms(inp.value).filter(t => !list.some(x => x.toLowerCase() === t.toLowerCase())); inp.value = ''; if(add.length){ list.push(...add); add.forEach(t => freshTerms.add(t)); sync() } };
+  inp.addEventListener('keydown', e => {
+    if(e.key === 'Enter' || (e.key === ',' && !/\d$/.test(inp.value))){ e.preventDefault(); commit() }
+    else if(e.key === 'Backspace' && !inp.value && list.length){ list.pop(); sync() }
+  });
+  inp.addEventListener('blur', () => { if(inp.value.trim()) commit() });
+  inp.addEventListener('change', () => { if(datalist && CATS.includes(inp.value.trim())) commit() });
+  wrap.appendChild(inp);
+  return wrap;
+}
+
+function renderPForm(){
+  const a = document.activeElement, fk = a?.dataset?.fk;
+  for(const [id, key] of [['p-topic','topic'], ['p-desc','description'], ['p-notes','notes']]) if(a !== $('#' + id)) $('#' + id).value = P[key] || '';
+  const gbox = $('#p-groups'); gbox.innerHTML = '';
+  P.concepts.forEach((g, gi) => {
+    const el = document.createElement('div'); el.className = 'group' + (g.name === UNSORTED ? ' unsorted' : '');
+    el.innerHTML = `<div class="group-head"><input aria-label="Group name" data-fk="g${gi}-name" value="${esc(g.name)}">
+      <select aria-label="Weight" title="How much a match in this group counts">${WEIGHTS.map(([w, l]) => `<option value="${w}"${w === g.weight ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <button class="gdel" title="Delete group">✕</button></div>` +
+      (g.name === UNSORTED ? `<div style="font-size:12px;color:var(--muted);margin:-2px 0 8px">The agent sorts these into groups and adds synonyms on the next run — or rename this group yourself.</div>` : '');
+    const nm = el.querySelector('input');
+    nm.addEventListener('input', () => { g.name = nm.value; sync('form') });
+    nm.addEventListener('change', () => sync());
+    el.querySelector('select').onchange = e => { g.weight = +e.target.value; sync() };
+    el.querySelector('.gdel').onclick = () => {
+      const before = renderMd(P); P.concepts.splice(gi, 1); sync();
+      toast(`Deleted group “${g.name}”`, () => { P = parseMd(before); sync() });
+    };
+    el.appendChild(chipList(g.terms, '', `g${gi}-add`, '+ add term'));
+    gbox.appendChild(el);
+  });
+  $('#p-neg').replaceWith(Object.assign(chipList(P.negative, 'neg', 'neg-add', '+ add excluded term'), {id:'p-neg'}));
+  $('#p-cats').replaceWith(Object.assign(chipList(P.categories_boost, 'cat', 'cat-add', '+ add category', 'cat-list'), {id:'p-cats'}));
+  freshTerms.clear();
+  if(fk){ const t = document.querySelector(`[data-fk="${fk}"]`); if(t && t !== a){ t.focus(); if(t.value != null) t.setSelectionRange?.(t.value.length, t.value.length) } }
+}
+
+/* wiring */
+$('#cat-list').innerHTML = CATS.map(c => `<option value="${c}">`).join('');
+for(const [id, key] of [['p-topic','topic'], ['p-desc','description'], ['p-notes','notes']]){
+  $('#' + id).dataset.fk = id;
+  $('#' + id).addEventListener('input', e => { P[key] = e.target.value; sync('form') });
+}
+$('#p-addgroup').onclick = () => { P.concepts.push({name:'New group', weight:2, terms:[]}); sync(); const n = $(`[data-fk="g${P.concepts.length - 1}-name"]`); n.focus(); n.select() };
+let mdTimer = 0;
+$('#p-md').addEventListener('input', e => { clearTimeout(mdTimer); mdTimer = setTimeout(() => { P = parseMd(e.target.value); sync('md') }, 300) });
+$('#p-md').addEventListener('blur', () => sync());
+
+const pOpen = v => {
+  $('#peditor').classList.toggle('hidden', !v); $('#p-toggle').textContent = v ? 'Hide editor ▴' : 'Edit profile ▾';
+  $('#p-toggle').setAttribute('aria-expanded', v); try { localStorage.setItem('litvault-peditor', v ? '1' : '') } catch(e){}
+};
+$('#p-toggle').onclick = () => pOpen($('#peditor').classList.contains('hidden'));
+
+const qa = $('#qa-input');
+const autosize = () => {
+  if(!qa.value){ qa.style.height = ''; qa.style.overflowY = 'hidden'; return }
+  qa.style.height = 'auto'; qa.style.height = Math.min(qa.scrollHeight, 160) + 'px';
+  qa.style.overflowY = qa.scrollHeight > 160 ? 'auto' : 'hidden';
+};
+qa.addEventListener('input', autosize);
+qa.addEventListener('keydown', e => { if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); quickAdd() } });
+$('#qa-add').onclick = quickAdd;
+function quickAdd(){
+  const raw = qa.value.trim(); if(!raw) return;
+  const before = renderMd(P);
+  let target = $('#qa-target').value, msg;
+  // a list if every comma/semicolon-separated piece is short; any piece over 5 words means it's a sentence
+  const isList = splitTerms(raw).every(t => t.split(/\s+/).length <= 5);
+  if(target === 'auto') target = isList ? 'unsorted' : 'desc';
+  if(target === 'desc'){
+    P.description = (P.description ? P.description.trim() + '\n\n' : '') + raw; msg = 'Added to the description';
+  } else {
+    let list, name;
+    if(target === 'neg'){ list = P.negative; name = 'Exclude' }
+    else if(target === 'cat'){ list = P.categories_boost; name = 'Preferred categories' }
+    else if(target === 'unsorted'){
+      let g = P.concepts.find(c => c.name === UNSORTED);
+      if(!g){ g = {name:UNSORTED, weight:2, terms:[]}; P.concepts.push(g) }
+      list = g.terms; name = UNSORTED;
+    } else { const g = P.concepts[+target.slice(1)]; list = g.terms; name = g.name }
+    // skip terms already anywhere in the same kind of list (keywords anywhere in a group, or this list)
+    const pool = (target === 'neg' || target === 'cat' ? list : P.concepts.flatMap(c => c.terms)).map(x => x.toLowerCase());
+    const terms = splitTerms(raw), add = terms.filter((t, i) => !pool.includes(t.toLowerCase()) && terms.findIndex(u => u.toLowerCase() === t.toLowerCase()) === i);
+    list.push(...add); add.forEach(t => freshTerms.add(t));
+    const dup = terms.length - add.length;
+    msg = add.length ? `Added ${add.length} keyword${add.length > 1 ? 's' : ''} to “${name}”` + (dup ? ` · ${dup} already in the profile` : '') : 'Already in the profile';
+  }
+  qa.value = ''; autosize(); sync();
+  toast(msg, () => { P = parseMd(before); sync() });
+}
+
+let fileHandle = null;
+function markSaved(md){ savedMd = md; sync() }
+async function api(path, body){
+  const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {});
+  const j = await r.json().catch(() => ({}));
+  if(!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+const hasTerms = () => P.concepts.some(g => g.terms.length);
+// blank topic/description + some keywords: ask Claude (via the server) to fill them in on the page,
+// so the user sees and can edit them before anything is saved
+let filling = false;
+async function ensureFilled(){
+  const blank = [!P.topic.trim() && 'topic', !P.description.trim() && 'description'].filter(Boolean);
+  if(!API || !blank.length || !hasTerms() || filling) return;
+  filling = true;
+  const btns = [$('#p-run'), $('#p-save'), $('#p-save2')]; btns.forEach(b => b.disabled = true);
+  toast(`Writing a ${blank.join(' and ')} from your keywords…`, null);
+  try {
+    const before = renderMd(P), r = await api('/api/autofill', {md:renderMd(P)});
+    const done = blank.filter(k => r[k] && !P[k].trim());  // don't overwrite anything typed meanwhile
+    done.forEach(k => P[k] = r[k]);
+    if(done.length){
+      sync(); pOpen(true);
+      toast(`Filled in the ${done.join(' and ')}${r.via === 'claude' ? '' : ' from your keywords (Claude unavailable)'} — edit anytime`, () => { P = parseMd(before); sync() });
+    }
+  } catch(e){ toast('Could not fill in the blanks: ' + e.message, null) }
+  btns.forEach(b => b.disabled = false); filling = false;
+}
+// with the server: write straight to profiles/<topic>.md, no dialog
+async function saveProfile(quiet){
+  await ensureFilled();
+  const md = renderMd(P);
+  if(!P.topic.trim()){ toast(hasTerms() ? 'Give the topic a name first' : 'Add some keywords or a topic first', null); pOpen(true); (hasTerms() ? $('#p-topic') : $('#qa-input')).focus(); return null }
+  if(API){
+    try {
+      const r = await api('/api/profile', {md});
+      markSaved(md); D.profile_file = r.name + '.md';
+      if(!quiet) toast(`Saved to ${r.path}`, null);
+      loadSwitcher();
+      return r;
+    } catch(e){ toast('Could not save: ' + e.message, null); return null }
+  }
+  if(window.showSaveFilePicker){
+    try {
+      fileHandle = fileHandle || await showSaveFilePicker({suggestedName:pFileName(), types:[{description:'Markdown', accept:{'text/markdown':['.md']}}]});
+      const w = await fileHandle.createWritable(); await w.write(md); await w.close();
+      markSaved(md); toast(`Saved ${fileHandle.name}`, null); return;
+    } catch(e){ if(e.name === 'AbortError') return; fileHandle = null }
+  }
+  download(pFileName(), md, 'text/markdown'); markSaved(md);
+  toast(`Downloaded ${pFileName()} — start the LitVault server to save into profiles/ directly`, null);
+}
+$('#p-save').onclick = $('#p-save2').onclick = () => saveProfile();
+$('#p-copy').onclick = async () => {
+  const md = renderMd(P);
+  try { await navigator.clipboard.writeText(md) } catch(e){ const t = $('#p-md'); t.value = md; t.select(); document.execCommand('copy') }
+  toast('Profile Markdown copied', null);
+};
+$('#p-load').onclick = () => $('#p-file-input').click();
+$('#p-file-input').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  const before = renderMd(P); savedMd = await f.text(); P = parseMd(savedMd); fileHandle = null; sync();
+  toast(`Loaded ${f.name}`, () => { P = parseMd(before); sync() }); e.target.value = '';
+};
+$('#p-revert').onclick = () => { const before = renderMd(P); P = parseMd(savedMd); sync(); toast('Reverted to the saved file', () => { P = parseMd(before); sync() }) };
+
+/* topic switcher (server only) */
+async function loadSwitcher(){
+  if(!API) return;
+  try {
+    const list = await api('/api/profiles'), sel = $('#p-switch'), cur = slugTopic(P.topic);
+    sel.innerHTML = list.map(p => `<option value="${esc(p.name)}"${p.name === cur ? ' selected' : ''}>${esc(p.topic)}</option>`).join('') +
+      (list.some(p => p.name === cur) ? '' : `<option value="" selected>${esc(P.topic.trim() || 'New research topic')} (not saved)</option>`) +
+      `<option value="__new">+ New research topic…</option>`;
+    sel._list = list; sel.classList.remove('hidden');
+  } catch(e){}
+}
+$('#p-switch').onchange = async e => {
+  const v = e.target.value; if(!v) return;
+  if(!sameAsSaved() && P.topic.trim()) await saveProfile(true);  // keep edits before leaving
+  if(v === '__new'){ location.href = '/new'; return }
+  const p = e.target._list.find(x => x.name === v);
+  location.href = p && p.board ? p.board : '/new?profile=' + encodeURIComponent(v);
+};
+
+/* retrieval */
+$('#p-days').addEventListener('change', e => { const d = Math.max(1, Math.min(90, +e.target.value || 7)); P.days = d; sync() });
+$$('#p-srcs input').forEach(cb => cb.onchange = () => {
+  const on = $$('#p-srcs input').filter(x => x.checked).map(x => x.value);
+  if(!on.length){ cb.checked = true; toast('Pick at least one database', null); return }  // never search nothing
+  P.sources = on; sync();
+});
+const ICON = {pending:'○', running:'', done:'✓', skipped:'–', error:'✕'};
+function showJob(j){
+  $('#runbox').classList.remove('hidden');
+  $('#run-steps').innerHTML = (j.steps || []).map(s => `<li class="${s.state}"><span class="ic">${s.state === 'running' ? '<span class="spin"></span>' : ICON[s.state] || '○'}</span>` +
+    `<span class="lbl">${esc(s.label)}</span><span class="det">${esc(s.detail || '')}</span></li>`).join('') || '<li class="running"><span class="ic"><span class="spin"></span></span><span class="lbl">Starting…</span></li>';
+  $('#run-err').textContent = j.error ? 'Stopped: ' + j.error : '';
+  $('#p-run').disabled = !j.done;
+  $('#p-run').textContent = j.done ? '▶ Start literature retrieval' : 'Retrieving…';
+}
+let polling = false;
+async function poll(){
+  if(polling) return; polling = true;
+  try {
+    for(;;){
+      const j = await api('/api/job');
+      if(!j.name){ break }
+      showJob(j);
+      if(j.done){
+        if(j.board && !j.error){ toast('Retrieval finished — opening the new board', null); setTimeout(() => location.href = j.board, 900) }
+        break;
+      }
+      await new Promise(r => setTimeout(r, 1200));
+    }
+  } catch(e){ $('#run-err').textContent = 'Lost contact with the LitVault server: ' + e.message; $('#p-run').disabled = false }
+  polling = false;
+}
+$('#p-run').onclick = async () => {
+  if(!API){ pOpen(true); toast('Start the LitVault server to run retrievals from this page (see the note in the editor)', null); return }
+  if(!hasTerms() && !P.description.trim()){ toast('Add some keywords first — the topic and description can be left blank', null); $('#qa-input').focus(); return }
+  const saved = await saveProfile(true); if(!saved) return;
+  try {
+    showJob({steps:[], done:false});
+    await api('/api/run', {name:saved.name});
+    poll();
+  } catch(e){ showJob({steps:[], done:true, error:e.message}) }
+};
+
+sync();
+try { pOpen(D.empty || !!localStorage.getItem('litvault-peditor')) } catch(e){ pOpen(!!D.empty) }
+if(API){
+  loadSwitcher();
+  // pick up edits made to the file since this board was built (e.g. synonyms Claude added)
+  if(D.profile_file) api('/api/profile?name=' + encodeURIComponent(D.profile_file.replace(/\.md$/, ''))).then(r => {
+    if(r.md && r.md !== savedMd){ const draft = !sameAsSaved(); savedMd = r.md; if(!draft) P = parseMd(r.md); sync() }
+  }).catch(() => {});
+  api('/api/job').then(j => { if(j.name && !j.done) poll() }).catch(() => {});
+}
+</script>
+</body>
+</html>
