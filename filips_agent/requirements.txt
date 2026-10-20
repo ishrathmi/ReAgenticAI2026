@@ -1,0 +1,6 @@
+rdkit
+pymupdf
+requests
+jsonschema>=4.18
+anthropic
+pytest

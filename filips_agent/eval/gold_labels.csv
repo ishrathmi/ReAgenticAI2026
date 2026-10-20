@@ -1,0 +1,7 @@
+name,smiles,homo_dft,lumo_dft,dft_method,ip,ip_method,ea,ea_method,comment,source_doi
+,COC(=O)CCCC1(c2ccccc2)C23c4c5c6c7c8c9c(c%10c%11c2c2c4c4c%12c5c5c6c6c8c8c%13c%14c%15c%16c%17c%18c%19c%20c%21c%22c%23c(c%14c%14c%24c%23c%23c%22c%22c%20c(c2c%22c%11c%23c%10c%24c9c%148)c4c%19c%12c%17c5c%16c%136)C%152C(CCCC(=O)OC)(c4ccccc4)C%18%212)C713,n/a,n/a,n/a,6.1,arbitrary,3.7,CV,,10.1002/adma.200702438
+,CCCCCCc1ccc(C2(c3ccc(CCCCCC)cc3)c3cc4c(cc3-c3sc5cc(C=C6C(=O)c7cc(Cl)c(Cl)cc7C6=O)sc5c32)C(c2ccc(CCCCCC)cc2)(c2ccc(CCCCCC)cc2)c2c-4sc3cc(C=C4C(=O)c5cc(Cl)c(Cl)cc5C4=O)sc23)cc1,-5.48,-3.15,"B3LYP/6-31G(d,p)",5.72,CV,3.83,CV,,10.1038/s41560-019-0448-5
+,CCCCC(CC)COc1cc(C=C2C(=O)c3cc(Cl)c(Cl)cc3C2=C(C#N)C#N)sc1-c1cc2c(s1)-c1sc(-c3sc(C=C4C(=O)c5cc(Cl)c(Cl)cc5C4=C(C#N)C#N)cc3OCC(CC)CCCC)cc1C2(CC(CC)CCCC)CC(CC)CCCC,n/a,n/a,n/a,5.24,CV w/o Fc,4.02,CV w/o Fc,,10.1007/s40843-020-1639-x
+,"*C.*C.CCCCCCc1ccc(C2(c3ccc(CCCCCC)cc3)c3cc4c(cc3-c3sc5cc(C=C6C(=O)c7ccccc7C6=C(C#N)C#N)sc5c32)C(c2ccc(CCCCCC)cc2)(c2ccc(CCCCCC)cc2)c2c-4sc3cc(C=C4C(=O)c5ccccc5C4=C(C#N)C#N)sc23)cc1 |m:0:94.95,2:44.45|",-5.50,-3.35,"B3LYP/6-31G(d,p)",5.58,CV,3.98,CV + Eg,,10.1002/adma.201602776
+,COc1ccc(N(c2ccc(OC)cc2)c2ccc3c(c2)C2(c4cc(N(c5ccc(OC)cc5)c5ccc(OC)cc5)ccc4-3)c3cc(N(c4ccc(OC)cc4)c4ccc(OC)cc4)ccc3-c3ccc(N(c4ccc(OC)cc4)c4ccc(OC)cc4)cc32)cc1,-4.20,-0.63,B3LYP/6-31G(d),5.20,CV,2.25,CV + Eg,,10.1007/s11426-018-9432-x
+,*c1ccc2c(c1)C(C(=O)CCCCCCC)(C(=O)CCCCCCC)c1cc(-c3ccc4c(c3)c3cc(*)ccc3n4CC(CC)CCCC)ccc1-2,n/a,n/a,n/a,5.4,UPS,2.34,UPS + Eg,,10.1038/s41566-022-00999-9
