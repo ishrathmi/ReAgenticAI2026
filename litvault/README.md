@@ -13,21 +13,16 @@ Works for any field. There is nothing to install beyond Python 3.9+ (standard li
 
 ## Install
 
-**As a plugin (recommended).** In Claude Code, run:
-
-```
-/plugin marketplace add XcharlieXChen/litvault
-/plugin install litvault@litvault
-```
-
-**Or copy the skill** into `~/.claude/skills/`:
+LitVault lives in the `litvault/` folder of the [ReAgenticAI2026](https://github.com/ishrathmi/ReAgenticAI2026) team repo. Clone the repo, then run the installer, which copies the skill into `~/.claude/skills/lit-digest`:
 
 ```bash
-git clone https://github.com/XcharlieXChen/litvault.git
+git clone https://github.com/ishrathmi/ReAgenticAI2026.git
 ```
 ```bash
-sh litvault/install.sh
+sh ReAgenticAI2026/litvault/install.sh
 ```
+
+Restart Claude Code (or start a new session) so it picks up the skill. To update later, run `git pull` in the clone and the installer again; your previous copy is kept as `~/.claude/lit-digest.backup-<date>`. To install into one project only, run the installer from that project's folder with `--project`.
 
 ## Use
 

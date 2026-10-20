@@ -6,7 +6,7 @@ set -e
 SRC="$(cd "$(dirname "$0")" && pwd)/skills/lit-digest"
 if [ "$1" = "--project" ]; then DEST="$(pwd)/.claude/skills/lit-digest"; else DEST="$HOME/.claude/skills/lit-digest"; fi
 
-if [ ! -f "$SRC/SKILL.md" ]; then echo "Run this from a clone of the litvault repo (skills/lit-digest not found)." >&2; exit 1; fi
+if [ ! -f "$SRC/SKILL.md" ]; then echo "install.sh must stay inside its litvault/ folder (skills/lit-digest not found next to it)." >&2; exit 1; fi
 if ! command -v python3 >/dev/null 2>&1; then echo "LitVault needs Python 3.9 or newer (python3 not found)." >&2; exit 1; fi
 
 mkdir -p "$(dirname "$DEST")"
