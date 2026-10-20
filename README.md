@@ -32,23 +32,43 @@ python -m pytest                 # offline checks, no key needed
 
 Each team member uses their own OpenRouter key in `.env`. Never commit `.env`.
 
+## Running the agent
+
+Each researcher keeps a **profile** in `config/<profile>/` with two files:
+
+- `papers.yaml` — sources (local folders, search queries), the task description and extraction instructions, prefilter keywords, budget and output settings.
+- `schema.json` — the fields to extract. The extraction prompt is built from this file.
+
+```bash
+python run_agent.py --profile peptide_solubility --dry-run   # preview; no API calls
+python run_agent.py --profile peptide_solubility             # writes outputs/peptide_solubility_db.csv and .xlsx
+```
+
+To start your own profile, copy `config/peptide_solubility/` to `config/<your_topic>/`, then edit `task`, `instructions`, `prefilter.signals` and `schema.json`. Set `domain:` only if you add a post-processing module in `src/litagent/domains/` (unit conversion, derived values); otherwise remove the line.
+
 ## Repository structure
 
 ```
+run_agent.py       command-line entry point
 src/litagent/
-  models.py        OpenRouter adapter and FakeModel for tests
-  config.py        loads config/papers.yaml and config/schema.json
-  agent.py         agent loop (to be built)
-  tools/           search, fetch, parse_pdf, extract
+  models.py        OpenRouter adapter, FakeModel for tests, CachedModel (disk cache + call budget)
+  config.py        loads config/<profile>/papers.yaml and schema.json
+  agent.py         agent loop: gather -> parse -> filter -> extract -> verify -> link -> enrich
+  output.py        CSV and formatted Excel output
+  tools/
+    search.py      ChemRxiv search (add other APIs here)
+    fetch.py       downloads open-access PDFs
+    parse_pdf.py   PDF, XLSX and DOCX to text and table chunks
+    prefilter.py   keyword scoring to limit what is sent to the model
+    extract.py     schema-driven extraction with evidence verification
+  domains/         optional per-topic post-processing (e.g. peptide_solubility.py)
 config/
-  papers.yaml      DOIs or search queries to process
-  schema.json      fields to extract (agree on these as a team)
+  papers.yaml, schema.json   shared defaults
+  peptide_solubility/        Ishrath's profile
 data/sample/       small open-access test papers
-tests/             offline tests using FakeModel
+tests/             offline tests using fake models
 examples/          runnable examples
 ```
-
-To adapt the agent to your own research, edit `config/papers.yaml` and `config/schema.json`; the code stays the same.
 
 ## Data sources
 

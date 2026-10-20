@@ -1,0 +1,69 @@
+# Profile: peptide solubility (Ishrath)
+# Run:  python run_agent.py --profile peptide_solubility [--dry-run]
+#
+# To make your own profile, copy this folder to config/<your_topic>/ and edit
+# task, instructions, prefilter.signals and schema.json.
+
+domain: peptide_solubility          # optional post-processing in src/litagent/domains/peptide_solubility.py
+model: openai/gpt-4o-mini           # any OpenRouter model ID; overrides OPENROUTER_MODEL in .env
+
+# Sources ------------------------------------------------------------------
+local_folders:                      # scanned recursively for .pdf, .xlsx, .docx (main text and SI)
+  - data/papers
+queries: []                         # open-access search; uncomment to use
+#  - {source: chemrxiv, query: "peptide solubility", limit: 5}
+#  - {source: chemrxiv, query: "peptide aggregation aqueous solubility", limit: 5}
+download_dir: .cache/papers         # downloaded PDFs (git-ignored)
+
+# Main text and SI of the same paper: list a quoted file-name fragment for each file.
+# Records that name a peptide only by label ("variant 3") get the sequence from any
+# table with a "sequence" column in the same group. Files not listed form their own group.
+paper_groups:
+  camsol_ptm_natcommun_2023:
+    - "s41467-023-42940"
+    - "41467_2023_42940"
+
+# What to extract ----------------------------------------------------------
+task: >
+  You extract experimental peptide solubility data from scientific papers and their
+  supporting information.
+
+instructions: |
+  - Report only peptides (including peptides with non-canonical residues, caps, or conjugates). Ignore small molecules, proteins over ~50 residues, and polymers that are not peptides.
+  - Report measured values and explicit observations ("insoluble in water", "formed a gel at 5 mg/mL"). Report predicted or computed solubility only if clearly labelled, and set method to "computational".
+  - If a value is given as a range, put the lower bound in solubility_value and the full range in notes.
+  - If the passage refers to a peptide by a label only ("P3"), give the label in peptide_name and leave sequence null.
+  - Give the unit exactly as written (mg/mL, µM, g/L, % w/v, mole fraction ...). Mole-fraction solubility is often written as x or x1.
+  - In tables, report experimental values only. Skip columns of model-calculated values (e.g. "xcal", "calc", NRTL, predicted) unless no experimental value exists.
+  - Values written as "0.077±0.003": put 0.077 in solubility_value and the uncertainty in notes.
+  - Put co-solvent composition in solvent, e.g. "water/DMSO, 20% DMSO by mass".
+evidence_field: evidence
+
+# Prefilter: only chunks scoring >= min_score are sent to the model ----------
+prefilter:
+  min_score: 4
+  max_chunks_per_file: 40
+  chunk_chars: 1500                 # smaller chunks keep long tables within one reply
+  required_pattern: "solub|insolub|dissol|precipitat"
+  signals:
+    - {pattern: '\bsolub\w*', weight: 3}
+    - {pattern: '\binsolub\w*', weight: 3}
+    - {pattern: '\bdissol\w*', weight: 2}
+    - {pattern: '\b(aggregat\w*|precipitat\w*|turbid\w*|gel\w*)', weight: 1}
+    - {pattern: '\b(mg|µg|μg|ug|g)\s*(/|\s)\s*(mL|ml|L)\b', weight: 2}
+    - {pattern: '\b(mg|µg|μg)\s*mL\s*[-−–]\s*1', weight: 2}
+    - {pattern: '\b\d+(\.\d+)?\s*(mM|µM|μM|nM)\b', weight: 1}
+    - {pattern: '\bpH\s*\d', weight: 1}
+    - {pattern: '\b(PBS|HEPES|Tris|phosphate|DMSO|HFIP|acetonitrile|TFA)\b', weight: 1}
+    - {pattern: '\b(peptides?|sequence|residues?)\b', weight: 1}
+    - {pattern: '\b(nephelometr\w*|shake[- ]flask|supernatant|centrifug\w*|UV[- ]?vis|HPLC|CamSol|log ?S)\b', weight: 2}
+
+# Budget and output ----------------------------------------------------------
+llm:
+  max_output_tokens: 4000           # large tables produce many records; replies are salvaged if cut off
+  max_calls_per_run: 200            # hard stop to protect a fixed token allowance
+  cache_dir: .cache/llm             # cached replies make re-runs free
+output:
+  dir: outputs                      # git-ignored
+  basename: peptide_solubility_db
+dedupe_keys: [doi, source_file, peptide_name, sequence, solubility_value, solubility_unit, solvent, ph, temperature_c]

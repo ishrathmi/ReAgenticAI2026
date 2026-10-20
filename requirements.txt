@@ -11,6 +11,8 @@ jsonschema>=4.18      # validates extracted records against config/schema.json
 httpx>=0.27           # API calls (Crossref, OpenAlex, Semantic Scholar, arXiv, ChemRxiv, Europe PMC)
 beautifulsoup4>=4.12  # HTML/XML parsing
 pymupdf>=1.24         # PDF text extraction (imported as fitz)
+pdfplumber>=0.11      # PDF table extraction
+openpyxl>=3.1         # reads SI spreadsheets; writes the Excel database
 
 # Testing
 pytest>=8.0
