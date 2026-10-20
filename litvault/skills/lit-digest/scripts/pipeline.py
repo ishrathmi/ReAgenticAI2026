@@ -16,6 +16,7 @@ from profile_md import parse, render
 from sources import fetch, parse_sources, SOURCES
 from prefilter import shortlist
 from build_board import board_data, render_html
+from workspace import default_workspace, ensure
 
 STEPS = [("refine", "Refine keywords"), ("fetch", "Fetch abstracts"), ("shortlist", "Keyword screen"),
          ("score", "Claude reads & scores"), ("board", "Build board")]
@@ -187,7 +188,17 @@ def keyword_scores(cand):
 def run(a):
     st = Status(a.status)
     profile_path = os.path.abspath(a.profile)
-    project = os.path.dirname(os.path.dirname(profile_path))
+    if os.path.basename(os.path.dirname(profile_path)) == "profiles":
+        project = os.path.dirname(os.path.dirname(profile_path))
+    else:
+        # a profile from elsewhere (e.g. examples/): copy it into the workspace and run that copy,
+        # so results never land next to the source file or inside the skill folder
+        project = ensure(default_workspace())
+        dest = os.path.join(project, "profiles", os.path.basename(profile_path))
+        if not os.path.exists(dest):
+            shutil.copyfile(profile_path, dest)
+        print(f"using {dest}", file=sys.stderr)
+        profile_path = dest
     md_text = open(profile_path).read()
     prof = parse(md_text)
     have_claude = bool(shutil.which("claude")) and not a.no_claude
