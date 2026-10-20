@@ -1,0 +1,12 @@
+{
+  "name": "litvault",
+  "version": "1.0.0",
+  "description": "Weekly bioRxiv / medRxiv / ChemRxiv literature digest: Claude screens every new abstract for your research topic, scores relevance, and opens a drag-and-drop board to file papers into vaults and download them as PDFs.",
+  "author": {
+    "name": "Xu Chen"
+  },
+  "homepage": "https://github.com/ishrathmi/ReAgenticAI2026/tree/main/litvault",
+  "repository": "https://github.com/ishrathmi/ReAgenticAI2026",
+  "license": "MIT",
+  "keywords": ["literature", "biorxiv", "medrxiv", "chemrxiv", "preprints", "research", "digest"]
+}
