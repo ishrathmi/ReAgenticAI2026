@@ -135,6 +135,38 @@ def paper_flags(text: str) -> dict:
     return {"paper_mentions_c_amide": bool(C_AMIDE_RE.search(text or ""))}
 
 
+def paper_context(text: str, limit: int = 6) -> str:
+    """Sentences from the whole paper that a repair may need (here: statements about C-terminal amidation)."""
+    out = []
+    for m in C_AMIDE_RE.finditer(text or ""):
+        start = max(text.rfind(".", 0, m.start()) + 1, m.start() - 200)
+        end = text.find(".", m.end())
+        end = min(end + 1 if end != -1 else len(text), m.end() + 200)
+        snippet = re.sub(r"\s+", " ", text[start:end]).strip()
+        if snippet not in out:
+            out.append(snippet)
+        if len(out) >= limit:
+            break
+    return "\n".join(out)
+
+
+# Repair rules: review_reason fragment -> (fields the repair may change, instruction for the model)
+REPAIRS = {
+    "not found in source text": (
+        ["solubility_unit"],
+        "The extracted unit does not appear in the passage. Give the unit exactly as written in the "
+        "passage (including a table header or caption), or null if the passage states no unit."),
+    "evidence contains a unit but solubility_unit is empty": (
+        ["solubility_unit"],
+        "The evidence quote contains a unit but solubility_unit is empty. Give the unit exactly as written."),
+    "paper mentions C-terminal amidation but c_terminus is empty": (
+        ["c_terminus", "n_terminus"],
+        "The paper describes C-terminal amidation (see PAPER CONTEXT). Decide whether it applies to THIS "
+        "peptide. If the text states it does, set c_terminus to \"amide\" (and n_terminus if also stated) and "
+        "quote the supporting sentence in repair_evidence. If it refers to other peptides, keep null."),
+}
+
+
 def enrich(rec: dict) -> dict:
     if not rec.get("sequence"):
         from_name = sequence_from_name(rec.get("peptide_name"))

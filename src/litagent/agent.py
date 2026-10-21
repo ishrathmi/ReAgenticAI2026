@@ -22,6 +22,7 @@ from .tools.extract import build_system_prompt, extract
 from .tools.fetch import fetch
 from .tools.parse_pdf import SUPPORTED, parse_document
 from .tools.prefilter import select
+from .tools.repair import GENERIC, repair
 from .tools.search import search
 
 try:
@@ -94,6 +95,10 @@ def run(papers_config: dict, schema: dict, model, root: Path | None = None, dry_
     system_prompt = build_system_prompt(schema, cfg["task"], cfg.get("instructions", ""), evidence_key)
     enrich = domains.load(cfg.get("domain"))
     paper_flags = domains.load_paper_flags(cfg.get("domain"))
+    rep_cfg = cfg.get("repair") or {}
+    rep_rules = {**GENERIC, **(domains.load_hook(cfg.get("domain"), "REPAIRS", {}) or {})}
+    context_fn = domains.load_hook(cfg.get("domain"), "paper_context", lambda text: "")
+    papers = {}                     # source_file -> (full text, context for repairs)
     pf = cfg["prefilter"]
     groups = cfg.get("paper_groups") or {}
 
@@ -113,7 +118,9 @@ def run(papers_config: dict, schema: dict, model, root: Path | None = None, dry_
         doc.title = meta.get("title") or doc.title
         doc.doi = meta.get("doi") or doc.doi
         group = group_of(path.name, groups)
-        flags = paper_flags(" ".join(c.text for c in doc.chunks))
+        full_text = " ".join(c.text for c in doc.chunks)
+        flags = paper_flags(full_text)
+        papers[path.name] = (full_text, context_fn(full_text) if rep_cfg.get("enabled") else "")
         found_labels = label_lookup(doc.chunks, path.name)
         lookups.setdefault(group, {}).update({k: v for k, v in found_labels.items()
                                               if k not in lookups.get(group, {})})
@@ -159,7 +166,7 @@ def run(papers_config: dict, schema: dict, model, root: Path | None = None, dry_
             for rec in found:
                 rec["_problems"] = rec.get("_problems", []) + _schema_problems(rec, schema)
                 rec.update(doi=doc.doi, paper_title=doc.title, source=meta["source"],
-                           source_file=path.name, page=c.page, location=c.label, _group=group,
+                           source_file=path.name, page=c.page, location=c.label, _group=group, _passage=c.text,
                            model=getattr(model, "model", ""), **flags,
                            extracted_at=datetime.now().isoformat(timespec="seconds"))
                 records.append(rec)
@@ -181,6 +188,32 @@ def run(papers_config: dict, schema: dict, model, root: Path | None = None, dry_
             rec["needs_review"] = True
             rec["review_reason"] = "; ".join(filter(None, [rec.get("review_reason"), *problems]))
         out.append(rec)
+
+    # Repair: one targeted retry per flagged record whose problem has a repair rule
+    if rep_cfg.get("enabled") and not dry_run:
+        fixed = rejected = 0
+        for i, rec in enumerate(out):
+            log.context = {"file": rec.get("source_file"), "location": rec.get("location")}
+            full_text, context = papers.get(rec.get("source_file"), ("", ""))
+            try:
+                with log.stage("repair", file=rec.get("source_file"), location=rec.get("location")):
+                    new = repair(rec, rec.get("_passage", ""), full_text, context, schema, model, enrich,
+                                 rep_rules, evidence_key, rep_cfg.get("max_attempts", 1))
+            except BudgetExceeded as exc:
+                print(f"  [stop] repair: {exc}")
+                break
+            except Exception as exc:
+                print(f"  [warn] repair {rec.get('peptide_name')}: {exc}")
+                continue
+            out[i] = new
+            if new.get("repair_attempted"):
+                fixed += new.get("repair_outcome") == "accepted"
+                rejected += new.get("repair_outcome") != "accepted"
+        if fixed or rejected:
+            print(f"Repair: {fixed} record(s) corrected, {rejected} left for review")
+            log.event("repair_summary", accepted=fixed, not_accepted=rejected)
+    for rec in out:
+        rec.pop("_passage", None)
     return dedupe(out, cfg.get("dedupe_keys")), files
 
 

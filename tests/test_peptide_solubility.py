@@ -186,3 +186,71 @@ def test_review_flags_and_caveats():
     assert rec["needs_review"] and "amidation" in rec["review_reason"]
     rec = enrich({**no_term, "solubility_unit": "mole fraction", "paper_mentions_c_amide": False})
     assert not rec["needs_review"]
+
+
+def test_repair_step():
+    """A correction is kept only if it removes a flagged problem, adds none and is backed by a verified quote."""
+    from litagent.domains.peptide_solubility import REPAIRS, enrich
+    from litagent.models import FakeModel
+    from litagent.tools.repair import GENERIC, repair
+    _, schema = load_profile("peptide_solubility")
+    rules = {**GENERIC, **REPAIRS}
+    passage = "AA | 0.077±0.003 | 0.053"
+    paper = "N-acetylated and C-amidated peptides were synthesized. " + passage
+
+    def flagged(**kw):
+        rec = {"peptide_name": "AA (ala-ala)", "solubility_value": 0.077, "evidence": "AA | 0.077±0.003",
+               "evidence_verified": True, **kw}
+        return enrich(rec)
+
+    # 1. Invented unit: the model removes it -> accepted, flag cleared, change recorded
+    rec = flagged(solubility_unit="mg/mL", unit_in_source=False, c_terminus="free")
+    assert "not found in source text" in rec["review_reason"]
+    fix = FakeModel(replies=['{"record": {"solubility_unit": null}, "repair_evidence": null, "explanation": "no unit in passage"}'])
+    out = repair(rec, passage, paper, "", schema, fix, enrich, rules)
+    assert out["repair_outcome"] == "accepted" and not out["needs_review"]
+    assert out["solubility_unit"] is None and "mg/mL" in out["repaired_fields"]
+    assert out["data_caveats"] == "unit not stated by source"
+
+    # 2. The model replaces it with another unit that is also not in the passage -> rejected, original kept
+    rec = flagged(solubility_unit="mg/mL", unit_in_source=False, c_terminus="free")
+    bad = FakeModel(replies=['{"record": {"solubility_unit": "µM"}, "repair_evidence": "AA | 0.077±0.003"}'])
+    out = repair(rec, passage, paper, "", schema, bad, enrich, rules)
+    assert out["repair_outcome"] == "rejected" and out["solubility_unit"] == "mg/mL" and out["needs_review"]
+
+    # 3. Amide: accepted only with a quote that exists in the paper
+    rec = flagged(solubility_unit="mole fraction", paper_mentions_c_amide=True)
+    assert "amidation" in rec["review_reason"]
+    no_quote = FakeModel(replies=['{"record": {"c_terminus": "amide"}, "repair_evidence": null}'])
+    assert repair(dict(rec), passage, paper, "", schema, no_quote, enrich, rules)["repair_outcome"] == "rejected"
+    invented = FakeModel(replies=['{"record": {"c_terminus": "amide"}, "repair_evidence": "all peptides were amidated"}'])
+    assert repair(dict(rec), passage, paper, "", schema, invented, enrich, rules)["repair_outcome"] == "rejected"
+    good = FakeModel(replies=['{"record": {"c_terminus": "amide"}, "repair_evidence": "C-amidated peptides were synthesized"}'])
+    out = repair(dict(rec), passage, paper, "", schema, good, enrich, rules)
+    assert out["repair_outcome"] == "accepted" and out["c_terminus"] == "amide" and not out["needs_review"]
+
+    # 4. Fields outside the allowed list are ignored, so the value cannot be changed by a repair
+    rec = flagged(solubility_unit="mg/mL", unit_in_source=False, c_terminus="free")
+    sneaky = FakeModel(replies=['{"record": {"solubility_unit": null, "solubility_value": 99}}'])
+    assert repair(rec, passage, paper, "", schema, sneaky, enrich, rules)["solubility_value"] == 0.077
+
+    # 5. A record with no repairable problem makes no model call
+    clean = flagged(solubility_unit="mole fraction", c_terminus="free")
+    assert repair(clean, passage, paper, "", schema, FakeModel(replies=[]), enrich, rules) is clean
+
+
+def test_flag_diagnosis():
+    import importlib.util, pathlib
+    spec = importlib.util.spec_from_file_location("cm", pathlib.Path(__file__).parents[1] / "compare_models.py")
+    cm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cm)
+    gold = [{"source_file": "a.pdf", "peptide_name": "P1", "solubility_value": "1", "solubility_unit": "mg/mL"},
+            {"source_file": "a.pdf", "peptide_name": "P2", "solubility_value": "2", "solubility_unit": ""}]
+    recs = [{"source_file": "a.pdf", "peptide_name": "P1", "solubility_value": 1, "solubility_unit": "mg/mL",
+             "needs_review": True, "review_reason": "low model confidence"},
+            {"source_file": "a.pdf", "peptide_name": "P2", "solubility_value": 2, "solubility_unit": "mg/mL",
+             "needs_review": True, "review_reason": "unit 'mg/mL' not found in source text"}]
+    summary, rules, missed = cm.flag_diagnosis(gold, recs)
+    assert summary == {"errors caught": 1, "errors total": 1, "correct records flagged": 1, "correct records total": 1}
+    assert rules == {"low model confidence": (1, 0), "unit '…' not found in source text": (1, 1)}
+    assert missed == {}

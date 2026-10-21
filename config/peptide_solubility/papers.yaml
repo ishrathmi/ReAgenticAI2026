@@ -69,10 +69,16 @@ coverage:
   exclude_columns: "cal|pred|model|nrtl|fit"
   min_coverage: 0.8
 
+# Repair: one targeted retry for flagged records whose problem has a rule in REPAIRS
+# (src/litagent/domains/peptide_solubility.py). A correction is kept only if it passes the same checks.
+repair:
+  enabled: true
+  max_attempts: 1
+
 # Budget and output ----------------------------------------------------------
 llm:
   max_output_tokens: 4000           # large tables produce many records; replies are salvaged if cut off
-  max_calls_per_run: 200            # hard stop to protect a fixed token allowance
+  max_calls_per_run: 300            # hard stop to protect a fixed token allowance (extraction + repair)
   cache_dir: .cache/llm             # cached replies make re-runs free
 output:
   dir: outputs                      # git-ignored

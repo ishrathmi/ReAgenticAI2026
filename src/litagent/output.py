@@ -10,7 +10,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 AGENT_COLUMNS = ["evidence_verified", "evidence_match", "unit_in_source", "needs_review", "review_reason",
-                 "data_caveats", "model", "extracted_at"]
+                 "data_caveats", "repair_attempted", "repair_outcome", "repaired_fields", "repair_note",
+                 "model", "extracted_at"]
 WIDE = {"evidence": 60, "paper_title": 40, "title": 50, "notes": 40, "sequence": 28,
         "modifications": 25, "solvent": 22, "buffer": 22, "method": 24, "review_reason": 36, "data_caveats": 30,
         "meaning": 90, "source_file": 30}
@@ -48,6 +49,7 @@ def write(records: list, files: list, schema: dict, out_dir: str, basename: str)
         {"column": "evidence_verified", "meaning": "TRUE if the evidence quote was found in the source text (exact or ≥85% fuzzy match)."},
         {"column": "unit_in_source", "meaning": "TRUE if the extracted unit appears in the source passage; FALSE suggests the model supplied a unit the text does not state."},
         {"column": "needs_review", "meaning": "TRUE rows are highlighted: the record is probably wrong. review_reason explains why. Check these first."},
+        {"column": "repair_outcome", "meaning": "accepted: a targeted retry fixed a flagged problem and passed the same checks (repaired_fields shows old -> new). rejected / no change: the original record was kept."},
         {"column": "data_caveats", "meaning": "Gaps in the source itself (for example, no unit stated). Not an extraction error; does not set needs_review."},
     ]
     _sheet(wb.create_sheet("Field guide"), ["column", "meaning"], guide)

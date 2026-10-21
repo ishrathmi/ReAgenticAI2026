@@ -41,7 +41,7 @@ from litagent.tools.extract import coerce  # noqa: E402
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
 INK, INK_2, GRID = "#0b0b0b", "#52514e", "#e6e5e0"
 KEEP = ["source_file", "location", "page", "doi", "paper_title", "source", "evidence_verified",
-        "evidence_match", "sequence_source", "model", "paper_mentions_c_amide"]
+        "evidence_match", "sequence_source", "model", "paper_mentions_c_amide", "repair_outcome"]
 
 
 # --- loading -------------------------------------------------------------------------------
@@ -219,10 +219,45 @@ def automatic(recs: list) -> dict:
         "duplicate records %": 100 * dupes / n,
         "flagged for review %": 100 * sum(bool(r.get("needs_review")) for r in recs) / n,
         "with data caveat %": 100 * sum(bool(r.get("data_caveats")) for r in recs) / n,
+        "corrected by repair %": 100 * sum(r.get("repair_outcome") == "accepted" for r in recs) / n,
         "evidence found in source %": 100 * sum(bool(r.get("evidence_verified")) for r in recs) / n,
         "with sequence %": 100 * sum(bool(r.get("sequence")) for r in recs) / n,
         "numeric values with unit %": 100 * sum(bool(r.get("solubility_unit")) for r in numeric) / (len(numeric) or 1),
     }
+
+
+def _rule(reason: str) -> str:
+    """'unit 'mg/mL' not found in source text' -> 'unit '…' not found in source text'; numbers -> N."""
+    s = re.sub(r"'[^']*'", "'…'", reason)
+    s = re.sub(r"\d+(?:\.\d+)?", "N", s)
+    return s.split(" (")[0].strip()
+
+
+def flag_diagnosis(gold: list, recs: list) -> tuple:
+    """How well needs_review separates wrong records from correct ones, overall and per rule.
+
+    A record counts as wrong if any field check fails against its matched reference row.
+    A useful rule flags mostly wrong records; a rule whose flagged records are rarely wrong adds work.
+    """
+    pairs = [(g, r) for g, r in match(gold, recs) if r is not None]
+    wrong = [(g, r) for g, r in pairs if not all(field_checks(g, r).values())]
+    right = [(g, r) for g, r in pairs if all(field_checks(g, r).values())]
+    summary = {
+        "errors caught": sum(bool(r.get("needs_review")) for _, r in wrong),
+        "errors total": len(wrong),
+        "correct records flagged": sum(bool(r.get("needs_review")) for _, r in right),
+        "correct records total": len(right),
+    }
+    rules = {}
+    for g, r in pairs:
+        is_wrong = not all(field_checks(g, r).values())
+        for reason in filter(None, str(r.get("review_reason") or "").split("; ") if r.get("needs_review") else []):
+            k = _rule(reason)
+            n, e = rules.get(k, (0, 0))
+            rules[k] = (n + 1, e + is_wrong)
+    missed = Counter(f for g, r in wrong if not r.get("needs_review")
+                     for f, ok in field_checks(g, r).items() if not ok)
+    return summary, rules, dict(missed)
 
 
 def agreement(per_model: dict) -> dict:
@@ -465,11 +500,12 @@ def main(argv=None) -> int:
             scores[m], fields[m], pairs, fps = gold_scores(gold, per_model[m], scope)
             details[m] = (pairs, fps)
     n_draft = sum(1 for g in gold if g.get("status", "draft") != "confirmed")
+    diagnosis = {m: flag_diagnosis(gold, per_model[m]) for m in models} if gold else {}
 
     out = out_dir / "comparison"
     out.mkdir(parents=True, exist_ok=True)
     plot_all(out, models, auto, agree, stats, bool(gold), scores, fields, len(gold), n_draft)
-    write_workbook(out / "comparison.xlsx", models, auto, agree, stats, scores, fields, details)
+    write_workbook(out / "comparison.xlsx", models, auto, agree, stats, scores, fields, details, diagnosis)
 
     print(f"Compared {len(models)} models: {', '.join(models)}")
     if gold:
@@ -479,11 +515,20 @@ def main(argv=None) -> int:
             p = "n/a" if s["precision %"] is None else f"{s['precision %']:.0f}%"
             fa = "n/a" if s["field accuracy %"] is None else f"{s['field accuracy %']:.0f}%"
             print(f"  {short(m):<28} recall {s['recall %']:.0f}%  precision {p}  field accuracy {fa}")
+        print("Review flag (needs_review) against the reference set:")
+        for m in models:
+            d, rules, missed = diagnosis[m]
+            print(f"  {short(m):<28} catches {d['errors caught']}/{d['errors total']} wrong records; "
+                  f"flags {d['correct records flagged']}/{d['correct records total']} correct records"
+                  + (f"; unflagged errors in: {', '.join(f'{k} ({v})' for k, v in missed.items())}" if missed else ""))
+            weak = [k for k, (n, e) in rules.items() if n >= 5 and e / n < 0.2]
+            if weak:
+                print(f"  {'':<28} rules that rarely find errors (<20% of flagged records wrong): {'; '.join(weak)}")
     print(f"Charts and workbook: {out}")
     return 0
 
 
-def write_workbook(path, models, auto, agree, stats, scores, fields, details):
+def write_workbook(path, models, auto, agree, stats, scores, fields, details, diagnosis=None):
     from openpyxl import Workbook
     from openpyxl.styles import Font
     wb = Workbook()
@@ -529,6 +574,24 @@ def write_workbook(path, models, auto, agree, stats, scores, fields, details):
                       r.get("temperature_c"), ""])
         for c in s[1]:
             c.font = Font(bold=True)
+    if diagnosis:
+        s = wb.create_sheet("Flag diagnosis")
+        s.append(["model", "rule (review_reason)", "matched records flagged", "of which wrong", "% wrong",
+                  "verdict"])
+        for m, (d, rules, missed) in diagnosis.items():
+            s.append([short(m), "ALL FLAGS: wrong records caught", d["errors caught"], d["errors total"],
+                      round(100 * d["errors caught"] / (d["errors total"] or 1), 1), ""])
+            s.append([short(m), "ALL FLAGS: correct records flagged", d["correct records flagged"],
+                      d["correct records total"],
+                      round(100 * d["correct records flagged"] / (d["correct records total"] or 1), 1), ""])
+            for k, (n, e) in sorted(rules.items(), key=lambda kv: -kv[1][0]):
+                verdict = "useful" if e / n >= 0.4 else ("weak" if e / n >= 0.2 else "rarely finds errors")
+                s.append([short(m), k, n, e, round(100 * e / n, 1), verdict if n >= 5 else "too few to judge"])
+            for f, v in missed.items():
+                s.append([short(m), f"UNFLAGGED errors in field: {f}", v, v, 100.0, "no rule catches these"])
+        for c in s[1]:
+            c.font = Font(bold=True)
+        s.column_dimensions["B"].width = 60
     wb.save(path)
 
 

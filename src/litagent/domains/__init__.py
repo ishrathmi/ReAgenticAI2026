@@ -21,6 +21,13 @@ def load_paper_flags(name: str | None):
     return getattr(module, "paper_flags", lambda text: {})
 
 
+def load_hook(name: str | None, attr: str, default=None):
+    """Optional attribute of a domain module (e.g. REPAIRS, paper_context), or default."""
+    if not name:
+        return default
+    return getattr(importlib.import_module(f"litagent.domains.{name}"), attr, default)
+
+
 def _generic(rec: dict) -> dict:
     reasons = [] if rec.get("evidence_verified") else ["evidence quote not found in source"]
     if rec.get("unit_in_source") is False:
