@@ -9,6 +9,7 @@
     python -m filips_agent run [--batch 10]                 inbox, extract, triage, export
     python -m filips_agent review                           apply decisions typed into review.csv
     python -m filips_agent reprocess                        rebuild records from saved extractions (no API)
+    python -m filips_agent images [--doi D] [--si]          check structures against the paper's drawings
     python -m filips_agent status                           counts per status
     python -m filips_agent export                           write the CSV tables to data/output/
 """
@@ -18,7 +19,7 @@ import time
 
 import anthropic
 
-from . import fetch, llm, review
+from . import fetch, llm, ocsr, review
 from .agents import extractor, inbox_sorter, triage
 from .ledger import TO_READ, Ledger
 
@@ -58,6 +59,28 @@ def apply_and_export(ledger):
         print(f"could not open {e.filename}; close it (e.g. in Excel) and run again")
 
 
+def do_images(ledger, doi=None, si=False, refresh=False):
+    tools = ocsr.available()
+    if not tools["decimer"]:
+        print("the image tools aren't installed; see ocsr/README.md")
+        return
+    if not tools["molscribe"]:
+        print("MolScribe isn't installed: DECIMER only")
+    dois = [doi] if doi else [json.loads(p.read_text(encoding="utf-8"))["doi"]
+                              for p in sorted(extractor.EXTRACTIONS.glob("*.json"))]
+    rows = []
+    for d in dois:
+        found = ocsr.check_paper(d, si, refresh)
+        rows += found
+        for r in found:
+            print(f"{r['verdict']:36} {r['compound'][:24]:24} {r['figure']}, {r['picked_by']}  ({d})")
+        if not found:
+            print(f"{'no structure drawing found':36} {'':24} ({d})")
+    ocsr.note_in_review(ledger, rows)
+    print(f"report written to {ocsr.write_report(rows)}")
+    apply_and_export(ledger)
+
+
 def do_triage(ledger, batch, model=None):
     for doi, status, reason in triage.run(ledger, batch, model):
         print(f"{status:10} {doi}  {reason[:100]}")
@@ -76,6 +99,10 @@ def main(argv=None):
         s.add_argument("--model", help="Claude model id (default: llm.MODELS)")
     for name in ("status", "export", "reprocess", "review"):
         sub.add_parser(name)
+    s = sub.add_parser("images", help="check structures against the paper's drawings (DECIMER, MolScribe)")
+    s.add_argument("--doi", help="one paper (default: every paper read so far)")
+    s.add_argument("--si", action="store_true", help="also look in the SI PDFs")
+    s.add_argument("--refresh", action="store_true", help="read the drawings again instead of using the cache")
     a = p.parse_args(argv)
     started = time.time()
 
@@ -119,6 +146,8 @@ def main(argv=None):
                 print(f"{status:14} {n}")
         elif a.cmd in ("export", "review"):
             apply_and_export(ledger)
+        elif a.cmd == "images":
+            do_images(ledger, a.doi, a.si, a.refresh)
 
     spent = llm.total_cost(since=started)
     if spent:

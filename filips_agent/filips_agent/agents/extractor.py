@@ -54,11 +54,12 @@ COMPOUND = {
         "structure_source": {"type": "string", "enum": ["name", "figure", "well-known", "other"]},
         "structure_confident": {"type": "boolean"},
         "structure_note": _NULLABLE_STR,
+        "structure_location": _NULLABLE_STR,
         "reported_formula": _NULLABLE_STR,
         "values": {"type": "array", "items": VALUE},
     },
     "required": ["names", "label_in_paper", "smiles", "structure_source", "structure_confident",
-                 "structure_note", "reported_formula", "values"],
+                 "structure_note", "structure_location", "reported_formula", "values"],
     "additionalProperties": False,
 }
 SCHEMA = {
@@ -104,7 +105,10 @@ unit with * end markers; CXSMILES (e.g. |m:...|) only for ambiguous regiochemist
 structure_source: where the structure came from. structure_confident: false if anything about \
 the structure is unclear (P3c); structure_note: what is unclear. For an isomer mixture that \
 CXSMILES can't express (P3d), give a representative isomer, keep structure_confident true if \
-nothing else is unclear, and say in structure_note that it is a mixture and which isomer is shown.
+nothing else is unclear, and say in structure_note that it is a mixture and which isomer is shown. \
+structure_location: where the structure is drawn, as "Figure 1a", "Scheme 2" or "SI Figure S3", \
+plus the label printed under the drawing if it differs from the name (e.g. "Scheme 1, compound 5"); \
+null if it isn't drawn.
   - reported_formula: the molecular formula the paper reports for it (characterisation, HRMS \
 "calcd for", elemental analysis), or null.
   - values: one entry per reported number, exactly as printed:
@@ -113,7 +117,8 @@ printed sign; unit as printed.
     - origin: "dft" for computed values (P5), "measured" for experimental ones. DFT-computed \
 IP/EA are not collected (P5c).
     - dft_method: functional/basis set, e.g. "B3LYP/6-31G(d,p)", plus anything unusual about \
-the calculation (P5); not the software package. Null for measured values.
+the calculation (P5); not the software package, and not simplified side chains (e.g. alkyl \
+chains replaced by methyl or H). Null for measured values.
     - technique: the measurement (e.g. "CV", "UPS", "IPES", "PESA") or null when no method is \
 stated (P6g). reference: for CV, "ferrocene" if Fc/Fc+ was the internal reference or \
 calibration, "electrode" if only an electrode such as Ag/Ag+ was used, null if not stated \

@@ -31,13 +31,15 @@ Because Claude reads PDFs directly (pages as text and images), the planned separ
 | `normalize_values.py` | Sign and unit conversion, one row per measurement set, Fc re-anchoring to 4.8 eV, method vocabulary incl. `arbitrary`, `n/a` filling. |
 | `structures.py` | RDKit canonicalisation (keeps and renumbers CXSMILES `m:` blocks), formula check incl. HRMS ions (P3e). |
 | `resolve.py` | Looks up each compound's names in OPSIN and PubChem (answers cached in `data/cache/structures/`) and compares them with Claude's as RDKit canonical SMILES without stereo. A disagreement → review; a missing structure is filled in (from PubChem only via review). Polymers and CXSMILES are skipped. |
+| `review.py` | The human route: decisions typed into `review.csv` (`accept`, with or without edited cells; `reject`; `reread` with a note that is given to the extractor next time). Edits validated, paper status recomputed, W2a names synced, decisions kept when a paper is read again. |
+| `figures.py` + `ocsr.py` | Image check of structures: find the compound's figure (caption naming it or showing structures, scheme final product, or where the extractor said it is drawn), cut out the drawings (DECIMER Segmentation), match each to the label next to it (text layer or OCR), read it with DECIMER and MolScribe, confirm with the formula and OPSIN/PubChem, compare with the extractor's SMILES. Report only: `structure_checks.csv` and a note in the review reason. Tools in their own environments, see `ocsr/README.md`. |
 | `checks.py` | Usual ranges (IP 4–7, EA 2–4.5, DFT HOMO −7.5 to −3.5, DFT LUMO −5 to 0 eV), IP > EA, HOMO < LUMO, DFT gap within 1 eV of the measured gap; W2a/W2b name–SMILES conflicts with the data table from other papers. Anything flagged → review. (The quote check is in the extractor.) |
 
 ## Structures (P3): several routes, then compare
 
 1. **Name → structure** *(built)*: OPSIN (rule-based IUPAC parser, web service) for systematic names.
 2. **Known compounds** *(built)*: PubChem PUG REST lookup by name or synonym (P3 well-known, e.g. P3HT, PC71BM, Y6, spiro-OMeTAD). The team's own dataset counts as a source once it grows.
-3. **Image → structure:** crop the scheme/figure with pymupdf and run an optical structure recognition tool (OCSR): **DECIMER** (open source, best general accuracy) with **MolScribe** as a second opinion. Both have heavy ML dependencies (TensorFlow / PyTorch), so they're an optional install.
+3. **Image → structure** *(built, `python -m filips_agent images`)*: find the figure that shows the compound (caption, scheme final product, or the extractor's `structure_location`), single out its drawing by the label next to it, and read it with **DECIMER** and **MolScribe** (second opinion). The reading must fit the reported formula / OPSIN / PubChem before it counts; a drawing that doesn't is reported as "different compound?". Heavy ML dependencies (TensorFlow / PyTorch), so they're an optional install in separate environments. Labels inside raster figures rely on OCR, so small or rotated labels can be missed (then all drawings in the figure are listed as candidates).
 4. **Vision LLM:** the structure resolver also reads the image directly.
 5. **Decide:** canonicalise all candidates with RDKit and compare them. *Built for routes 1–2:* comparison as RDKit canonical SMILES without stereo (E/Z and R/S are often drawn differently). Bond orders and charges must match, so unusual drawings such as PubChem's fullerenes (no double bonds) go to review. If the routes agree, accept. If they disagree, the resolver checks plausibility against the image, name and formula. Still unsure → review (P3c). Small molecules always get the formula check (P3e).
 
@@ -58,6 +60,8 @@ seed DOIs (LitVault digest, manual list)
                       └─> Extractor reads the PDF (main text, then SI if needed)
                            └─> structures (RDKit) → OPSIN/PubChem cross-check → normalize_values → checks (→ later: Structure resolver, Critic)
                                 └─> each compound → data.csv or review.csv (W3)
+                                     └─> person decides in review.csv → data / rejected / reread with a note
+                                └─> optional: images (DECIMER + MolScribe) → structure_checks.csv
                                 └─> P9 references from the same call
                                      ├─ likely   → reading list
                                      └─ possible → Triage on abstract
@@ -77,8 +81,10 @@ seed DOIs (LitVault digest, manual list)
 filips_agent/
   RULES.md  PLAN.md  requirements.txt
   filips_agent/         Python package (python -m filips_agent …)
-    ledger.py fetch.py llm.py normalize_values.py structures.py resolve.py checks.py dois.py __main__.py
+    ledger.py fetch.py llm.py normalize_values.py structures.py resolve.py checks.py review.py
+    figures.py ocsr.py dois.py __main__.py
     agents/   inbox_sorter.py triage.py extractor.py (schemas live next to each agent)
+  ocsr/                 image-tool workers + install notes (run in .venv-decimer / .venv-molscribe)
   eval/
     gold_labels.csv     hand-labelled reference data (tracked)
     score.py            compares stored results with gold_labels.csv (python -m eval.score)
@@ -93,9 +99,12 @@ filips_agent/
 1. `normalize_values.py` + tests: settles the conversion rules. *(done)*
 2. `ledger.py` + `fetch.py` (OpenAlex) + wish list/inbox, with a small command line (`python -m filips_agent …`). *(done)*
 3. Inbox sorter, triage and extractor agents with schemas, scored against `eval/gold_labels.csv`. *(built; first gold-set run and triage trial in progress)*
-4. `structures.py` + `resolve.py` + `checks.py`: RDKit, formula check, OPSIN and PubChem cross-checks, range and W2a/W2b checks. *(done)* DECIMER/MolScribe later.
+4. `structures.py` + `resolve.py` + `checks.py`: RDKit, formula check, OPSIN and PubChem cross-checks, range and W2a/W2b checks. *(done)* DECIMER/MolScribe image check *(built)*; human review route *(built)*.
 5. Figure reader, reference harvester, critic, review tables.
 6. Evaluation for Milestone IV: per-field accuracy (SMILES by InChIKey (canonical CXSMILES for polymers), values within ±0.02 eV, methods exact match), 5 runs per paper, baseline vs agent, Opus vs Sonnet.
+
+Later:
+- Extract the optical gap (`eopt`) as its own value where the paper reports one, with its method (absorption onset, film/solution). EA is not derived from IP − Eg unless the paper states the EA itself (decided 2026-10-21, PF8Cz in 10.1038/s41566-022-00999-9).
 
 ## Gold labels
 
