@@ -93,6 +93,7 @@ def run(papers_config: dict, schema: dict, model, root: Path | None = None, dry_
     evidence_key = cfg.get("evidence_field", "evidence")
     system_prompt = build_system_prompt(schema, cfg["task"], cfg.get("instructions", ""), evidence_key)
     enrich = domains.load(cfg.get("domain"))
+    paper_flags = domains.load_paper_flags(cfg.get("domain"))
     pf = cfg["prefilter"]
     groups = cfg.get("paper_groups") or {}
 
@@ -112,6 +113,7 @@ def run(papers_config: dict, schema: dict, model, root: Path | None = None, dry_
         doc.title = meta.get("title") or doc.title
         doc.doi = meta.get("doi") or doc.doi
         group = group_of(path.name, groups)
+        flags = paper_flags(" ".join(c.text for c in doc.chunks))
         found_labels = label_lookup(doc.chunks, path.name)
         lookups.setdefault(group, {}).update({k: v for k, v in found_labels.items()
                                               if k not in lookups.get(group, {})})
@@ -158,7 +160,7 @@ def run(papers_config: dict, schema: dict, model, root: Path | None = None, dry_
                 rec["_problems"] = rec.get("_problems", []) + _schema_problems(rec, schema)
                 rec.update(doi=doc.doi, paper_title=doc.title, source=meta["source"],
                            source_file=path.name, page=c.page, location=c.label, _group=group,
-                           model=getattr(model, "model", ""),
+                           model=getattr(model, "model", ""), **flags,
                            extracted_at=datetime.now().isoformat(timespec="seconds"))
                 records.append(rec)
             summary["records"] += len(found)

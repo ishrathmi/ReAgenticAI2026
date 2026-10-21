@@ -41,7 +41,7 @@ from litagent.tools.extract import coerce  # noqa: E402
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
 INK, INK_2, GRID = "#0b0b0b", "#52514e", "#e6e5e0"
 KEEP = ["source_file", "location", "page", "doi", "paper_title", "source", "evidence_verified",
-        "evidence_match", "sequence_source", "model"]
+        "evidence_match", "sequence_source", "model", "paper_mentions_c_amide"]
 
 
 # --- loading -------------------------------------------------------------------------------
@@ -65,6 +65,9 @@ def rescore(rows: list, schema: dict, enrich) -> list:
         rec = coerce(r, schema)
         rec.update({k: r.get(k) for k in KEEP})
         rec["evidence_verified"] = str(r.get("evidence_verified")).lower() == "true"
+        uis = str(r.get("unit_in_source", "")).lower()
+        rec["unit_in_source"] = True if uis == "true" else False if uis == "false" else None
+        rec["paper_mentions_c_amide"] = str(r.get("paper_mentions_c_amide")).lower() == "true"
         try:
             rec["confidence"] = float(r["confidence"]) if r.get("confidence") else None
         except ValueError:
@@ -215,6 +218,7 @@ def automatic(recs: list) -> dict:
         "records": len(recs),
         "duplicate records %": 100 * dupes / n,
         "flagged for review %": 100 * sum(bool(r.get("needs_review")) for r in recs) / n,
+        "with data caveat %": 100 * sum(bool(r.get("data_caveats")) for r in recs) / n,
         "evidence found in source %": 100 * sum(bool(r.get("evidence_verified")) for r in recs) / n,
         "with sequence %": 100 * sum(bool(r.get("sequence")) for r in recs) / n,
         "numeric values with unit %": 100 * sum(bool(r.get("solubility_unit")) for r in numeric) / (len(numeric) or 1),

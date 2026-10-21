@@ -154,3 +154,35 @@ def test_compare_matching():
     pairs = cm.match(gold, recs)
     assert pairs[0][1] is None                                  # plain 'teixobactin' must not take Arg10's record
     assert pairs[1][1] is recs[0] and pairs[2][1] is recs[1]
+
+
+def test_review_flags_and_caveats():
+    """needs_review marks likely extraction errors; data_caveats marks gaps in the source itself."""
+    from litagent.domains.peptide_solubility import enrich, paper_flags
+    from litagent.tools.extract import unit_in_source
+
+    assert unit_in_source("mg/mL", "soluble at 2.5 mg mL⁻¹ in water") is True
+    assert unit_in_source("µM", "below 50 μM by HPLC") is True
+    assert unit_in_source("mg/mL", "AA | 0.077 | 0.053") is False      # unit invented by the model
+    assert unit_in_source(None, "anything") is None
+
+    base = {"peptide_name": "GA (gly-ala)", "solubility_value": 0.1, "evidence_verified": True,
+            "c_terminus": "free"}
+    # Source gives no unit: a caveat, not a review flag
+    rec = enrich({**base, "evidence": "GA 0.115"})
+    assert not rec["needs_review"] and rec["data_caveats"] == "unit not stated by source"
+    # Unit present in the evidence but not extracted: review
+    rec = enrich({**base, "evidence": "GA dissolved at 0.1 mg/mL"})
+    assert rec["needs_review"] and "unit is empty" in rec["review_reason"]
+    # Unit extracted but absent from the source passage: review
+    rec = enrich({**base, "solubility_unit": "mg/mL", "unit_in_source": False, "evidence": "GA 0.115"})
+    assert rec["needs_review"] and "not found in source text" in rec["review_reason"]
+
+    # C-terminal amide stated in the paper but not extracted: review
+    assert paper_flags("N-acetylated and C-amidated peptides were synthesized")["paper_mentions_c_amide"]
+    assert not paper_flags("a native amide bond is replaced with an ester")["paper_mentions_c_amide"]
+    no_term = {k: v for k, v in base.items() if k != "c_terminus"}
+    rec = enrich({**no_term, "solubility_unit": "mole fraction", "paper_mentions_c_amide": True})
+    assert rec["needs_review"] and "amidation" in rec["review_reason"]
+    rec = enrich({**no_term, "solubility_unit": "mole fraction", "paper_mentions_c_amide": False})
+    assert not rec["needs_review"]

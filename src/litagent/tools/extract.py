@@ -122,6 +122,23 @@ def _squash(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip().lower()
 
 
+def _unit_key(s: str) -> str:
+    """'mg mL⁻¹', 'mg·mL-1', 'mg/mL' -> 'mgml'; 'µM' and 'μM' -> 'um'; '% (w/v)' -> '%wv'."""
+    s = str(s).replace("μ", "u").replace("µ", "u").replace("⁻¹", "").replace("−1", "").replace("-1", "")
+    return re.sub(r"[^a-z%]", "", s.lower())
+
+
+def unit_in_source(unit, source: str):
+    """True if the extracted unit appears in the source text; None when no unit was extracted.
+
+    Catches units the model filled in although the text does not state one.
+    """
+    if not unit:
+        return None
+    key = _unit_key(unit)
+    return bool(key) and key in _unit_key(source)
+
+
 def verify_evidence(quote, source: str, threshold: float = 0.85) -> tuple:
     """True if the quote appears in the source text (exactly, or as a close fuzzy match)."""
     if not quote:
@@ -151,5 +168,6 @@ def extract(text: str, schema: dict, model, system_prompt: str, title: str = "",
         ok, ratio = verify_evidence(rec.get(evidence_key), text)
         rec["evidence_verified"] = ok
         rec["evidence_match"] = ratio
+        rec["unit_in_source"] = unit_in_source(rec.get("solubility_unit"), text)
         records.append(rec)
     return records

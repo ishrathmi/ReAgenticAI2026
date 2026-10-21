@@ -13,7 +13,19 @@ def load(name: str | None):
     return module.enrich
 
 
+def load_paper_flags(name: str | None):
+    """Return a function paper_flags(full_text) -> dict of fields added to every record from that paper."""
+    if not name:
+        return lambda text: {}
+    module = importlib.import_module(f"litagent.domains.{name}")
+    return getattr(module, "paper_flags", lambda text: {})
+
+
 def _generic(rec: dict) -> dict:
-    rec["needs_review"] = not rec.get("evidence_verified")
-    rec["review_reason"] = "" if rec.get("evidence_verified") else "evidence quote not found in source"
+    reasons = [] if rec.get("evidence_verified") else ["evidence quote not found in source"]
+    if rec.get("unit_in_source") is False:
+        reasons.append(f"unit '{rec.get('solubility_unit')}' not found in source text")
+    rec["needs_review"] = bool(reasons)
+    rec["review_reason"] = "; ".join(reasons)
+    rec.setdefault("data_caveats", "")
     return rec

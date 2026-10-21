@@ -124,6 +124,17 @@ def to_mg_per_ml(value, unit, mw) -> tuple:
     return None, f"unit '{unit}' not recognised"
 
 
+# Statements that a peptide is C-terminally amidated. Plain "amide" is excluded: it usually means a backbone amide bond.
+C_AMIDE_RE = re.compile(r"C-?\s?amidated|C-?\s?terminal(?:ly)?\s+amid\w*|\w-NH2\b|\w-NH₂|CONH2|Rink\s+amide", re.I)
+# A unit in the evidence quote: mass/volume, molar, w/v %, mole fraction
+UNIT_IN_TEXT_RE = re.compile(r"\b(?:[mµμun]?g)\s*(?:/|·|\s)\s*(?:m?L|dL|cm3)\b|(?-i:\b[mµμun]?M\b)|mol\s*/\s*L|%\s*\(?w/v|mole?\s+fraction", re.I)
+
+
+def paper_flags(text: str) -> dict:
+    """Facts about the whole paper that a single passage may not contain."""
+    return {"paper_mentions_c_amide": bool(C_AMIDE_RE.search(text or ""))}
+
+
 def enrich(rec: dict) -> dict:
     if not rec.get("sequence"):
         from_name = sequence_from_name(rec.get("peptide_name"))
@@ -142,7 +153,8 @@ def enrich(rec: dict) -> dict:
     if mgml is not None and "molar" in note and not (n_term and c_term):
         note += "; MW assumes free termini (not stated)"
 
-    reasons = []
+    # needs_review: the record is probably wrong. data_caveats: the source itself is incomplete.
+    reasons, caveats = [], []
     t = rec.get("temperature_c")
     if isinstance(t, (int, float)) and t > 200:          # reported in kelvin
         rec["temperature_c"] = round(t - 273.15, 2)
@@ -155,12 +167,21 @@ def enrich(rec: dict) -> dict:
     if conversion_failed:
         reasons.append(failure_note or "value not converted")
     if rec.get("solubility_value") is not None and not rec.get("solubility_unit"):
-        reasons.append("unit not stated")
+        if UNIT_IN_TEXT_RE.search(str(rec.get("evidence") or "")):
+            reasons.append("evidence contains a unit but solubility_unit is empty")
+        else:
+            caveats.append("unit not stated by source")
+    if rec.get("unit_in_source") is False:
+        reasons.append(f"unit '{rec.get('solubility_unit')}' not found in source text")
+    if not c_term and (C_AMIDE_RE.search(" ".join(str(rec.get(k) or "") for k in ("evidence", "peptide_name", "sequence")))
+                       or rec.get("paper_mentions_c_amide")):
+        reasons.append("paper mentions C-terminal amidation but c_terminus is empty")
     if rec.get("solubility_value") is None and not rec.get("solubility_qualitative"):
         reasons.append("no value or qualitative result")
     if not rec.get("sequence"):
         reasons.append("sequence not found (not in passage or linked SI table)")
 
     rec.update(sequence_one_letter=seq1, calc_mw_g_mol=mw, solubility_mg_per_ml=mgml,
-               conversion_note=note, needs_review=bool(reasons), review_reason="; ".join(reasons))
+               conversion_note=note, needs_review=bool(reasons), review_reason="; ".join(reasons),
+               data_caveats="; ".join(caveats))
     return rec
