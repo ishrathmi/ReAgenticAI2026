@@ -61,6 +61,7 @@ Sub-rules:
 
 **P8.** If the information is not in the main text, search the supplementary information (SI). Always read the main text first.
 - **P8a.** Only search SI provided as documents (PDF, DOCX, text), not large datasets, videos, etc.
+- **P8b.** If the main text points to the SI for data needed here and the SI is not available, keep what the main text gives and put the paper on the wish list for its SI (status `awaiting_si`, with what is missing). When the SI is provided, the paper is read again with it.
 
 **P9.** List other sources the paper cites in a way that suggests they may contain HOMO/LUMO/IP/EA data on an organic semiconductor. Report the DOI of each, marked **likely** (data specifically attributed to it) or **possible** (mentioned in passing).
 

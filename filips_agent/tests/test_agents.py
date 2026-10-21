@@ -7,7 +7,7 @@ import pytest
 
 from filips_agent import fetch, llm, resolve
 from filips_agent.agents import extractor, triage
-from filips_agent.ledger import DONE, IRRELEVANT, PARTIAL, REVIEW, TO_READ, TO_TRIAGE, Ledger
+from filips_agent.ledger import AWAITING_SI, DONE, IRRELEVANT, PARTIAL, REVIEW, TO_READ, TO_TRIAGE, Ledger
 
 SPIRO = ("COc1ccc(N(c2ccc(OC)cc2)c2ccc3c(c2)C2(c4cc(N(c5ccc(OC)cc5)c5ccc(OC)cc5)ccc4-3)c3cc(N(c4ccc(OC)cc4)"
          "c4ccc(OC)cc4)ccc3-c3ccc(N(c4ccc(OC)cc4)c4ccc(OC)cc4)cc32)cc1")
@@ -152,6 +152,7 @@ def paper(tmp_path, monkeypatch, ledger):
     pdfs.mkdir()
     make_pdf(pdfs / "10.1000_x.pdf", "main")
     monkeypatch.setattr(fetch, "get_fulltext", functools.partial(fetch.get_fulltext, pdf_dir=pdfs))
+    monkeypatch.setattr(fetch, "si_files", functools.partial(fetch.si_files, pdf_dir=pdfs))
     monkeypatch.setattr(fetch, "get_work", lambda doi: {"title": "A paper", "referenced_works": ["W1"]})
     monkeypatch.setattr(fetch, "reference_list", lambda work: [{"doi": "10.1000/ref", "title": "Ref"}])
     monkeypatch.setattr(extractor, "EXTRACTIONS", tmp_path / "extractions")
@@ -187,11 +188,37 @@ def test_extract_second_pass_with_si(ledger, paper, monkeypatch):
     assert fake.calls[1]["task"].endswith(":si")
 
 
-def test_extract_without_si_never_asks_twice(ledger, paper, monkeypatch):
-    fake = FakeClaude(answer(compound(), needs_si=True))
+def test_paper_needing_missing_si_keeps_its_records_and_waits_for_it(ledger, paper, monkeypatch):
+    fake = FakeClaude(answer(compound(), needs_si=True, needs_si_reason="DFT energies in SI Table 1"))
     monkeypatch.setattr(llm, "ask_json", fake)
-    assert extractor.extract(ledger, "10.1000/x")["passes"] == 1
+    summary = extractor.extract(ledger, "10.1000/x")
+    assert (summary["passes"], summary["status"]) == (1, AWAITING_SI)
     assert "cache_control" not in fake.calls[0]["content"][0]
+    assert "We don't have the supporting information" in fake.calls[0]["content"][-1]["text"]
+    source = ledger.get("10.1000/x")
+    assert (source["status"], source["reason"]) == (AWAITING_SI, "SI needed: DFT energies in SI Table 1")
+    assert len(ledger.records("data")) == 1  # what the main text gave is kept
+    assert extractor.reprocess(ledger, "10.1000/x") == AWAITING_SI  # rebuilding doesn't lose the wish
+
+
+def test_review_decision_keeps_a_paper_waiting_for_its_si(ledger, paper, monkeypatch):
+    monkeypatch.setattr(llm, "ask_json", FakeClaude(answer(compound(structure_confident=False), needs_si=True)))
+    extractor.extract(ledger, "10.1000/x")
+    [rec] = ledger.records("review")
+    from filips_agent import review
+    review.apply_rows(ledger, [{"id": rec["id"], "decision": "accept"}])
+    assert ledger.get("10.1000/x")["status"] == AWAITING_SI
+
+
+def test_paper_read_again_with_its_si_goes_straight_to_the_si_pass(ledger, paper, monkeypatch):
+    monkeypatch.setattr(llm, "ask_json", FakeClaude(answer(compound(), needs_si=True, needs_si_reason="SI Table 1")))
+    extractor.extract(ledger, "10.1000/x")
+    make_pdf(paper / "10.1000_x_SI1.pdf", "si")
+    fake = FakeClaude(answer(compound(), compound(names=["X2"], smiles=None)))
+    monkeypatch.setattr(llm, "ask_json", fake)
+    summary = extractor.extract(ledger, "10.1000/x")
+    assert summary["passes"] == 1 and summary["status"] == PARTIAL
+    assert [b["type"] for b in fake.calls[0]["content"]] == ["document", "document", "text"]
 
 
 def test_extract_uncertain_and_not_osc(ledger, paper, monkeypatch):

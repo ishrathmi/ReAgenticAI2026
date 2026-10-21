@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .. import checks, fetch, llm, resolve
 from ..dois import clean_doi, doi_slug
-from ..ledger import DATA_DIR, IRRELEVANT
+from ..ledger import AWAITING_SI, DATA_DIR, IRRELEVANT, TO_READ
 from ..normalize_values import normalize_record
 from ..structures import canonicalize, formula_matches
 from . import rules_section
@@ -160,8 +160,9 @@ def _content(main_pdf, si_paths, si_available, doi, title, references, cache_mai
         si_note = "The supporting information is attached after the main paper."
     elif si_available:
         si_note = "Supporting information exists but is not attached; set needs_si if you need it."
-    else:
-        si_note = "No supporting information is available."
+    else:  # we don't have it; needs_si puts the paper on the wish list for it
+        si_note = ("We don't have the supporting information. If the paper points to it for values, the CV "
+                   "reference, structures or formulas needed here, set needs_si and say what is missing.")
     reviewer = ("\n\nA person reviewed an earlier reading of this paper and asked for it to be read again. "
                 "Their notes:\n" + "\n".join(f"- {h}" for h in hints)) if hints else ""
     blocks.append({"type": "text", "text": f"Paper: {doi}\nTitle: {title or '(unknown)'}\n{si_note}\n\n"
@@ -237,14 +238,20 @@ def extract(ledger, doi, model=None):
         return llm.ask_json(model, SYSTEM, content, SCHEMA, effort="high", max_tokens=64000,
                             task=f"extract:{doi}" + (":si" if si_paths else ""))
 
-    result, usage = ask([])
-    passes, cost = 1, usage["cost_usd"]
-    if result["needs_si"] and has_si:
+    saved = EXTRACTIONS / f"{doi_slug(doi)}.json"
+    asked_for_si = saved.exists() and json.loads(saved.read_text(encoding="utf-8"))["result"]["needs_si"]
+    if asked_for_si and has_si:  # read before without the SI it needed: straight to the pass with it
         result, usage = ask(text["si"])
-        passes, cost = 2, cost + usage["cost_usd"]
+        passes, cost = 1, usage["cost_usd"]
+    else:
+        result, usage = ask([])
+        passes, cost = 1, usage["cost_usd"]
+        if result["needs_si"] and has_si:
+            result, usage = ask(text["si"])
+            passes, cost = 2, cost + usage["cost_usd"]
 
     EXTRACTIONS.mkdir(parents=True, exist_ok=True)
-    (EXTRACTIONS / f"{doi_slug(doi)}.json").write_text(
+    saved.write_text(
         json.dumps({"doi": doi, "model": model, "passes": passes, "result": result}, indent=1), encoding="utf-8")
     status, new_refs = _store(ledger, doi, result, title)
     return {"doi": doi, "status": status, "passes": passes, "cost_usd": round(cost, 4),
@@ -263,11 +270,16 @@ def reprocess(ledger, doi):
 
 
 def _store(ledger, doi, result, title):
+    if (ledger.get(doi) or {}).get("status") == AWAITING_SI:
+        ledger.set_status(doi, TO_READ)  # decided again below, from this result
     if not result["is_osc"]:
         ledger.set_status(doi, IRRELEVANT, "Not organic semiconductors (paper, P1)", title=title)
         status = IRRELEVANT
     else:
         status = ledger.save_compounds(doi, to_compounds(result, doi, ledger.records("data")), result["uncertain"])
+        if result["needs_si"] and not fetch.si_files(doi):  # P8: keep what was found, wish for the SI
+            status = AWAITING_SI
+            ledger.set_status(doi, AWAITING_SI, "SI needed: " + (result["needs_si_reason"] or "the paper points to it"))
     new_refs = 0
     for r in result["references"]:
         ref = clean_doi(r["doi"])

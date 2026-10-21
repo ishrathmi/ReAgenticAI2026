@@ -5,6 +5,8 @@ A DOI is added once and never evaluated again. Statuses:
     to_triage     "possible" reference; its abstract still has to be judged (W1)
     to_read       on the reading list
     awaiting_pdf  relevant, but no full text yet; listed in the wish list (W6)
+    awaiting_si   read, but the paper points to SI that we don't have (P8); its records are kept,
+                  it's on the wish list, and it's read again when the SI is dropped in
     done          every compound record went to the data table (W3)
     partial       some records in data, some in review
     review        every record in review, incl. papers marked uncertain (P7c)
@@ -24,9 +26,10 @@ from .normalize_values import COLUMNS, NA
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
-TO_TRIAGE, TO_READ, AWAITING_PDF = "to_triage", "to_read", "awaiting_pdf"
+TO_TRIAGE, TO_READ, AWAITING_PDF, AWAITING_SI = "to_triage", "to_read", "awaiting_pdf", "awaiting_si"
 DONE, PARTIAL, REVIEW, IRRELEVANT = "done", "partial", "review", "irrelevant"
-STATUSES = (TO_TRIAGE, TO_READ, AWAITING_PDF, DONE, PARTIAL, REVIEW, IRRELEVANT)
+STATUSES = (TO_TRIAGE, TO_READ, AWAITING_PDF, AWAITING_SI, DONE, PARTIAL, REVIEW, IRRELEVANT)
+WISHED = (AWAITING_PDF, AWAITING_SI)  # on the wish list
 
 _RECORD_COLS = [c for c in COLUMNS if c != "source_doi"]
 _SCHEMA = f"""
@@ -165,7 +168,13 @@ class Ledger:
         return self.refresh_status(doi, uncertain)
 
     def refresh_status(self, doi, uncertain=None):
-        """W3: a paper's status follows from its records (rejected ones don't count)."""
+        """W3: a paper's status follows from its records (rejected ones don't count).
+
+        A paper waiting for its SI keeps that status until the SI arrives and it's read again.
+        """
+        current = self.get(doi)
+        if current and current["status"] == AWAITING_SI:
+            return AWAITING_SI
         targets = [r["target"] for r in self._records_of(doi)]
         kept = [t for t in targets if t != "rejected"]
         if not kept:
@@ -237,8 +246,9 @@ class Ledger:
         _write(out / "irrelevant.csv", ["doi", "title", "reason", "found_in"], self.queue(IRRELEVANT))
         everything = [dict(r) for r in self.db.execute(f"SELECT * FROM sources ORDER BY added_at, doi")]
         _write(out / "reading_list.csv", ["doi", "title", "status", "likelihood", "found_in", "reason"], everything)
-        wishes = [dict(s, link=f"https://doi.org/{s['doi']}") for s in self.queue(AWAITING_PDF)]
-        _write(out / "wishlist.csv", ["doi", "title", "link", "found_in", "reason"], wishes)
+        wishes = [dict(s, link=f"https://doi.org/{s['doi']}", needs="SI" if s["status"] == AWAITING_SI else "paper")
+                  for st in WISHED for s in self.queue(st)]
+        _write(out / "wishlist.csv", ["doi", "title", "needs", "link", "found_in", "reason"], wishes)
         return out
 
 

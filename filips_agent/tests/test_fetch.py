@@ -225,3 +225,97 @@ def test_si_detection_does_not_match_thesis():
     assert fetch._looks_like_si(Path("paper_ESI.pdf"), "")
     assert fetch._looks_like_si(Path("adma-sup-0001.pdf"), "")
     assert fetch._looks_like_si(Path("41560_2019_448_MOESM1_ESM.pdf"), "")
+
+
+# --- papers dropped in that the ledger doesn't know yet -------------------------------
+
+TITLES = {"10.1000/new": "Fused Ring Acceptors for Organic Solar Cells", "10.1000/cited": "Something Else Entirely"}
+
+
+@pytest.fixture
+def openalex_titles(monkeypatch):
+    monkeypatch.setattr(fetch, "get_work",
+                        lambda doi, cache_dir=None: {"doi": doi, "title": TITLES[doi]} if doi in TITLES else None)
+
+
+def test_new_paper_is_identified_by_doi_and_title_on_its_first_page(ledger, inbox, openalex_titles):
+    box, pdfs = inbox
+    # the cited DOI comes first on the page, but its title isn't printed there
+    make_pdf(box / "download.pdf", "see 10.1000/cited\nFused Ring Acceptors for Organic Solar Cells\nDOI: 10.1000/new")
+    make_pdf(box / "download_SI.pdf", "Supporting Information\n10.1000/new")
+    make_pdf(box / "scan.pdf", "no DOI on this page")
+
+    assert fetch.identify_dropped(ledger, box) == {"download.pdf": ("10.1000/new", True)}
+    assert ledger.get("10.1000/new")["status"] == TO_READ
+    assert ledger.get("10.1000/cited") is None
+    filed, skipped = fetch.collect_inbox(ledger, box, pdfs)
+    assert sorted(p.name for p in filed["10.1000/new"]) == ["10.1000_new.pdf", "10.1000_new_SI1.pdf"]
+    assert list(skipped) == ["scan.pdf"]
+
+
+def test_doi_typed_in_for_a_file_puts_it_on_the_reading_list(ledger, inbox, openalex_titles):
+    box, pdfs = inbox
+    make_pdf(box / "scan.pdf", "no DOI on this page")
+    assert fetch.assign_doi(ledger, "scan.pdf", "https://doi.org/10.1000/new", box).name == "10.1000_new.pdf"
+    assert ledger.get("10.1000/new")["title"] == TITLES["10.1000/new"]
+    filed, _ = fetch.collect_inbox(ledger, box, pdfs)
+    assert [p.name for p in filed["10.1000/new"]] == ["10.1000_new.pdf"]
+
+
+def test_doi_typed_in_is_checked(ledger, inbox, openalex_titles):
+    box, _ = inbox
+    make_pdf(box / "scan.pdf", "x")
+    with pytest.raises(ValueError, match="not a DOI"):
+        fetch.assign_doi(ledger, "scan.pdf", "hello", box)
+    ledger.add("10.1000/new", "done")
+    with pytest.raises(ValueError, match="already in the ledger as done"):
+        fetch.assign_doi(ledger, "scan.pdf", "10.1000/new", box)
+
+
+def test_si_dropped_without_its_paper_says_so_and_can_be_given_the_papers_doi(ledger, inbox, openalex_titles):
+    box, pdfs = inbox
+    make_pdf(box / "esi.pdf", "Supporting Information\nno DOI printed")
+    _, skipped = fetch.collect_inbox(ledger, box, pdfs)
+    assert "looks like supporting information" in skipped["esi.pdf"]
+    assert fetch.assign_doi(ledger, "esi.pdf", "10.1000/new", box).name == "10.1000_new_SI_esi.pdf"
+    make_pdf(box / "paper.pdf", "Fused Ring Acceptors for Organic Solar Cells\nDOI: 10.1000/new")
+    filed, _ = fetch.collect_inbox(ledger, box, pdfs)
+    assert sorted(p.name for p in filed["10.1000/new"]) == ["10.1000_new.pdf", "10.1000_new_SI1.pdf"]
+
+
+def test_paper_dropped_again_is_left_with_its_status_or_read_again(ledger, inbox, openalex_titles, monkeypatch):
+    from filips_agent import pipeline
+    box, pdfs = inbox
+    monkeypatch.setattr(fetch, "get_fulltext", lambda doi, pdf_dir=pdfs: {"main": pdfs / "x.pdf", "si": []}
+                        if doi == "10.1000/new" else None)
+    monkeypatch.setattr(fetch, "collect_inbox", lambda ledger, inbox, sorter=None, leave=None:
+                        ({}, dict(leave or {})))
+    ledger.add("10.1000/new", "irrelevant", reason="no compound with structure and energy data (P7a)")
+    make_pdf(box / "again.pdf", "Fused Ring Acceptors for Organic Solar Cells\nDOI: 10.1000/new")
+    _, skipped = pipeline.do_inbox(ledger, use_llm=False, inbox=box)
+    assert skipped["again.pdf"].startswith("already have this paper: 10.1000/new was read before (irrelevant: no compound")
+
+    ledger.add("10.1000/cited", "irrelevant", reason="abstract")  # known, but its PDF was never filed
+    TITLES["10.1000/cited"] = "Something Else Entirely"
+    make_pdf(box / "cited.pdf", "Something Else Entirely\nDOI: 10.1000/cited")
+    pipeline.do_inbox(ledger, use_llm=False, inbox=box)
+    assert ledger.get("10.1000/cited")["status"] == TO_READ
+
+
+def test_damaged_pdf_is_left_with_a_reason(ledger, inbox):
+    box, pdfs = inbox
+    (box / "broken.pdf").write_bytes(b"not a pdf at all")
+    assert fetch.identify_dropped(ledger, box) == {}
+    _, skipped = fetch.collect_inbox(ledger, box, pdfs)
+    assert "can't open this file" in skipped["broken.pdf"]
+
+
+def test_si_dropped_for_a_paper_waiting_for_it_puts_it_back_on_the_reading_list(ledger, inbox):
+    box, pdfs = inbox
+    pdfs.mkdir()
+    make_pdf(pdfs / "10.1000_x.pdf", "main")
+    ledger.add("10.1000/x", "awaiting_si", reason="SI needed: SI Table 1")
+    make_pdf(box / "10.1000_x_SI_esi.pdf", "Supporting Information")
+    filed, _ = fetch.collect_inbox(ledger, box, pdfs)
+    assert [p.name for p in filed["10.1000/x"]] == ["10.1000_x_SI1.pdf"]
+    assert (ledger.get("10.1000/x")["status"], ledger.get("10.1000/x")["reason"]) == (TO_READ, "SI provided")

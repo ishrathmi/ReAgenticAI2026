@@ -10,6 +10,7 @@
     python -m filips_agent review                           apply decisions typed into review.csv
     python -m filips_agent reprocess                        rebuild records from saved extractions (no API)
     python -m filips_agent images [--doi D] [--si] [--all]  check structures in review against the paper's drawings
+    python -m filips_agent web [--port 8000]                browser page at http://127.0.0.1:8000
     python -m filips_agent status                           counts per status
     python -m filips_agent export                           write the CSV tables to data/output/
 """
@@ -17,92 +18,10 @@ import argparse
 import json
 import time
 
-import anthropic
-
-from . import fetch, llm, ocsr, review
-from .agents import extractor, inbox_sorter, triage
+from . import fetch, llm
+from .agents import extractor
 from .ledger import TO_READ, Ledger
-
-
-def do_inbox(ledger, use_llm=True):
-    filed, skipped = fetch.collect_inbox(ledger, sorter=inbox_sorter.sort_file if use_llm else None)
-    for doi, paths in filed.items():
-        print(f"filed  {doi}: {', '.join(p.name for p in paths)}")
-    for name, why in skipped.items():
-        print(f"left   {name}: {why}")
-    print(f"{len(filed)} paper(s) filed; {len(skipped)} file(s) left in {fetch.INBOX}")
-
-
-def do_extract(ledger, batch, model=None):
-    checked = []  # image checks of structures sent to review
-    for source in ledger.queue(TO_READ, batch):
-        doi = source["doi"]
-        if not fetch.acquire(ledger, doi):
-            print(f"wish list  {doi}")
-            continue
-        try:
-            r = extractor.extract(ledger, doi, model)
-        except (llm.LLMError, anthropic.APIError) as e:
-            print(f"FAILED     {doi}: {e}")
-            continue
-        print(f"{r['status']:10} {doi}  compounds: {r['compounds']}, passes: {r['passes']}, "
-              f"new references: {r['new_references']}, ${r['cost_usd']:.2f}")
-        try:
-            rows = ocsr.check_flagged(ledger, doi)
-        except ocsr.ToolsMissing as e:
-            print(f"           {e}")
-            continue
-        checked += rows
-        for row in rows:
-            print(f"           image check: {row['verdict']} for {row['compound']} ({row['figure']}, {row['picked_by']})")
-    if checked:
-        print(f"image check report written to {ocsr.write_report(checked)}")
-    fetch.INBOX.mkdir(parents=True, exist_ok=True)
-
-
-def apply_and_export(ledger):
-    """Apply decisions typed into review.csv first, so rewriting the file never loses them."""
-    try:
-        for message in review.apply(ledger):
-            print(f"review  {message}")
-        print(f"tables written to {ledger.export()}")
-    except PermissionError as e:
-        print(f"could not open {e.filename}; close it (e.g. in Excel) and run again")
-
-
-def do_images(ledger, doi=None, si=False, refresh=False, everything=False):
-    tools = ocsr.available()
-    if not tools["decimer"]:
-        print("the image tools aren't installed; see ocsr/README.md")
-        return
-    if not tools["molscribe"]:
-        print("MolScribe isn't installed: DECIMER only")
-    if everything:
-        dois = [doi] if doi else [json.loads(p.read_text(encoding="utf-8"))["doi"]
-                                  for p in sorted(extractor.EXTRACTIONS.glob("*.json"))]
-        targets = dict.fromkeys(dois)
-    else:
-        targets = ocsr.flagged_structures(ledger, doi, unchecked=not refresh)
-        if not targets:
-            print("no unchecked records in review for a structure reason "
-                  "(--refresh to check them again, --all for every compound)")
-            return
-    rows = []
-    for d, only in targets.items():
-        found = ocsr.check_paper(d, si, refresh, only)
-        rows += found
-        for r in found:
-            print(f"{r['verdict']:36} {r['compound'][:24]:24} {r['figure']}, {r['picked_by']}  ({d})")
-        if not found:
-            print(f"{'no structure drawing found':36} {'':24} ({d})")
-    ocsr.note_in_review(ledger, rows)
-    print(f"report written to {ocsr.write_report(rows)}")
-    apply_and_export(ledger)
-
-
-def do_triage(ledger, batch, model=None):
-    for doi, status, reason in triage.run(ledger, batch, model):
-        print(f"{status:10} {doi}  {reason[:100]}")
+from .pipeline import apply_and_export, do_extract, do_images, do_inbox, do_triage
 
 
 def main(argv=None):
@@ -124,8 +43,15 @@ def main(argv=None):
     s.add_argument("--refresh", action="store_true", help="read the drawings again instead of using the cache")
     s.add_argument("--all", action="store_true", dest="everything",
                    help="every compound, not only those in review for a structure reason")
+    s = sub.add_parser("web", help="browser page: drop papers, see the tables, review")
+    s.add_argument("--port", type=int, default=8000)
+    s.add_argument("--no-browser", action="store_true", help="don't open the page automatically")
     a = p.parse_args(argv)
     started = time.time()
+    if a.cmd == "web":
+        from . import web  # Flask is only needed for the page
+        web.serve(a.port, not a.no_browser)
+        return
 
     with Ledger() as ledger:
         if a.cmd == "add":

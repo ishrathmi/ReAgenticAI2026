@@ -18,8 +18,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from .dois import clean_doi, doi_slug, find_dois
-from .ledger import AWAITING_PDF, DATA_DIR, TO_READ
+from .dois import DOI_RE, clean_doi, doi_slug, find_dois
+from .ledger import AWAITING_PDF, AWAITING_SI, DATA_DIR, TO_READ, WISHED
 
 OPENALEX = "https://api.openalex.org"
 CACHE_DIR = DATA_DIR / "cache" / "openalex"
@@ -148,12 +148,15 @@ def reference_dois(work, cache_dir=CACHE_DIR):
 
 def get_fulltext(doi, pdf_dir=PDF_DIR):
     """{"main": Path, "si": [Path]} if the paper's PDF is in data/pdfs/, else None."""
-    slug = doi_slug(doi)
-    main = Path(pdf_dir) / f"{slug}.pdf"
+    main = Path(pdf_dir) / f"{doi_slug(doi)}.pdf"
     if not main.exists():
         return None
-    si = sorted(p for p in Path(pdf_dir).glob(f"{slug}_SI*") if p.suffix.lower() in SI_EXTS)
-    return {"main": main, "si": si}
+    return {"main": main, "si": si_files(doi, pdf_dir=pdf_dir)}
+
+
+def si_files(doi, pdf_dir=PDF_DIR):
+    """The paper's filed SI files, also when its main text hasn't arrived yet."""
+    return sorted(p for p in Path(pdf_dir).glob(f"{doi_slug(doi)}_SI*") if p.suffix.lower() in SI_EXTS)
 
 
 def download_oa_pdf(work, pdf_dir=PDF_DIR):
@@ -240,7 +243,64 @@ def _file_text(path):
     return ""
 
 
-def collect_inbox(ledger, inbox=INBOX, pdf_dir=PDF_DIR, sorter=None):
+def _title_on_page(title, text, share=0.8):
+    """Are most of the title's words (longer than 3 letters) printed on the page?"""
+    words = {w for w in re.findall(r"[a-z0-9]+", title.lower()) if len(w) > 3}
+    page = set(re.findall(r"[a-z0-9]+", text.lower()))
+    return bool(words) and len(words & page) >= share * len(words)
+
+
+def identify_dropped(ledger, inbox=INBOX, cache_dir=CACHE_DIR):
+    """Find which paper each main-text PDF in the inbox is; put new papers on the reading list.
+
+    A PDF's DOI is taken from its first page and only trusted when OpenAlex gives that DOI a
+    title that is printed on the page too, because a first page can also cite other DOIs.
+    SI files are left for collect_inbox, which files them once their paper is wanted.
+    Returns {file name: (doi, added)}; added is False for a paper the ledger already knew.
+    """
+    found = {}
+    for path in sorted(Path(inbox).glob("*")):
+        if path.suffix.lower() != ".pdf":
+            continue
+        try:
+            text = _first_pages_text(path, pages=1)
+        except Exception:  # damaged; collect_inbox says so
+            continue
+        if _looks_like_si(path, text):
+            continue
+        for doi in find_dois(text)[:5]:
+            work = get_work(doi, cache_dir)
+            if not (work and work["title"] and _title_on_page(work["title"], text)):
+                continue
+            found[path.name] = (doi, ledger.add(doi, TO_READ, title=work["title"], reason="dropped in"))
+            break
+    return found
+
+
+def assign_doi(ledger, name, doi, inbox=INBOX, cache_dir=CACHE_DIR):
+    """For a dropped file whose DOI couldn't be found: put the paper on the reading list under
+    the DOI given and rename the file so collect_inbox files it as that paper's main text, or
+    as its SI when the file looks like supporting information. Returns the new path.
+    """
+    path = Path(inbox) / name
+    if not path.is_file():
+        raise FileNotFoundError(f"{name} is not in the inbox")
+    doi = clean_doi(doi)
+    if not DOI_RE.fullmatch(doi):
+        raise ValueError(f"{doi!r} is not a DOI")
+    known = ledger.get(doi)
+    if known and known["status"] not in (TO_READ, *WISHED):
+        raise ValueError(f"{doi} is already in the ledger as {known['status']}")
+    if not known:
+        work = get_work(doi, cache_dir)
+        ledger.add(doi, TO_READ, title=work["title"] if work else None, reason="dropped in")
+    si = path.suffix.lower() != ".pdf" or _looks_like_si(path, _file_text(path))
+    dest = path.with_name(doi_slug(doi) + (f"_SI_{path.stem}" if si else "") + path.suffix.lower())
+    path.rename(dest)
+    return dest
+
+
+def collect_inbox(ledger, inbox=INBOX, pdf_dir=PDF_DIR, sorter=None, leave=None):
     """File documents from the inbox under their DOI; waiting papers go back on the reading list.
 
     The rules match a file by its name (<doi slug>.pdf, <doi slug>_SI.pdf, Springer Nature
@@ -249,10 +309,11 @@ def collect_inbox(ledger, inbox=INBOX, pdf_dir=PDF_DIR, sorter=None):
     opinion; a file is only filed when rules and sorter agree on the kind, and (when both
     found one) on the paper.
 
+    leave: {file name: why} of files to leave in the inbox without looking at them.
     Returns (filed, skipped): {doi: [paths]} and {file name: why it stayed in the inbox}.
     """
     Path(inbox).mkdir(parents=True, exist_ok=True)
-    sources = [s for st in (AWAITING_PDF, TO_READ) for s in ledger.queue(st)]
+    sources = [s for st in (*WISHED, TO_READ) for s in ledger.queue(st)]
     wanted = {doi_slug(s["doi"]): s["doi"] for s in sources}
     titles = [{"doi": s["doi"], "title": s["title"]} for s in sources]
     plan, skipped = [], {}
@@ -260,10 +321,17 @@ def collect_inbox(ledger, inbox=INBOX, pdf_dir=PDF_DIR, sorter=None):
     for path in sorted(Path(inbox).glob("*")):
         if not path.is_file():
             continue
+        if leave and path.name in leave:
+            skipped[path.name] = leave[path.name]
+            continue
         if path.suffix.lower() not in SI_EXTS:
             skipped[path.name] = "not a document type that is read (P8a)"
             continue
-        text = _file_text(path)
+        try:
+            text = _file_text(path)
+        except Exception:
+            skipped[path.name] = "can't open this file: it may be damaged, or not really a PDF"
+            continue
         doi = _rule_doi(path, text, wanted)
         kind = _rule_kind(path, text, doi) if doi else None
         if sorter is not None and wanted:
@@ -280,7 +348,10 @@ def collect_inbox(ledger, inbox=INBOX, pdf_dir=PDF_DIR, sorter=None):
             if not doi and opinion["doi"]:
                 doi, kind = opinion["doi"], opinion["kind"]
         if not doi:
-            skipped[path.name] = "no matching paper on the reading list or wish list"
+            skipped[path.name] = ("looks like supporting information, but its paper isn't on the reading list: "
+                                  "drop the paper too, or type the paper's DOI"
+                                  if _looks_like_si(path, text) else
+                                  "no matching paper on the reading list or wish list")
             continue
         if kind == "main" and path.suffix.lower() != ".pdf":
             skipped[path.name] = "main text must be a PDF"
@@ -313,6 +384,9 @@ def collect_inbox(ledger, inbox=INBOX, pdf_dir=PDF_DIR, sorter=None):
             filed.setdefault(doi, []).append(dest)
 
     for doi in filed:
-        if ledger.get(doi)["status"] == AWAITING_PDF and get_fulltext(doi, pdf_dir):
+        status = ledger.get(doi)["status"]
+        if status == AWAITING_PDF and get_fulltext(doi, pdf_dir):
             ledger.set_status(doi, TO_READ, "PDF provided")
+        elif status == AWAITING_SI and si_files(doi, pdf_dir=pdf_dir):  # read again, now with its SI
+            ledger.set_status(doi, TO_READ, "SI provided")
     return filed, skipped

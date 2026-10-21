@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Energy Level Extractor</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #5d6879; --line: #dfe3ea;
+  --accent: #2456c9; --accent-ink: #ffffff; --accent-soft: #e6edfb;
+  --ok: #1d7a46; --ok-soft: #e3f3ea; --warn: #9a5b00; --warn-soft: #fbf0dc;
+  --bad: #b3261e; --bad-soft: #fbe5e3; --neutral-soft: #eef0f4;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151b; --panel: #1b2029; --ink: #e6e9ef; --muted: #9aa4b5; --line: #2e3542;
+    --accent: #7aa2ff; --accent-ink: #0d1424; --accent-soft: #1f2b47;
+    --ok: #6fd39b; --ok-soft: #173326; --warn: #f0b860; --warn-soft: #3a2c13;
+    --bad: #ff8a80; --bad-soft: #3d1c1a; --neutral-soft: #262c37;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline;
+  padding: 14px 20px 10px; background: var(--panel); }
+header h1 { font-size: 17px; margin: 0; }
+header .meta { color: var(--muted); font-size: 13px; }
+main { max-width: 1400px; margin: 0 auto; padding: 16px 20px 60px; display: grid; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+button, .button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  border-radius: 7px; padding: 6px 12px; cursor: pointer; text-decoration: none; display: inline-block; }
+button:hover, .button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.confirm { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+button.ok { color: var(--ok); } button.bad { color: var(--bad); }
+button:disabled { opacity: .5; cursor: default; }
+input[type=text], input[type=number] { font: inherit; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; min-width: 0; }
+input[type=number] { width: 64px; }
+
+/* the step strip: one chip per section, sticky */
+#strip { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line);
+  padding: 8px 20px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+#strip button { border-radius: 16px; padding: 3px 10px; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+#strip button.hot { border-color: var(--warn); background: var(--warn-soft); color: var(--warn); }
+#strip .arrow { color: var(--muted); font-size: 12px; }
+.num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--neutral-soft); font-size: 12px; font-weight: 600; flex: none; }
+.hot .num, section.hot .num { background: var(--warn); color: var(--panel); }
+
+/* one section per pipeline step */
+section.step { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+section.step.hot { border-color: var(--warn); }
+section.step > .head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: center;
+  width: 100%; text-align: left; border: none; background: none; padding: 12px 16px; border-radius: 10px; }
+section.step > .head:hover { border-color: transparent; background: var(--neutral-soft); }
+.head .title { font-size: 15px; font-weight: 700; }
+.head .what { grid-column: 2 / 3; color: var(--muted); font-size: 12.5px; }
+.head .fold { color: var(--muted); font-size: 12px; }
+section.step > .body { padding: 0 16px 16px; }
+section.step.folded > .body { display: none; }
+.count { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 6px; border-radius: 10px;
+  background: var(--neutral-soft); font-size: 12px; text-align: center; font-weight: 400; vertical-align: 1px; }
+.hot .count { background: var(--warn-soft); color: var(--warn); }
+
+#drop { border: 2px dashed var(--line); border-radius: 10px; padding: 24px 16px; text-align: center; cursor: pointer; }
+#drop.over, .rowdrop.over { border-color: var(--accent); background: var(--accent-soft); }
+#drop strong { font-size: 15px; }
+.inbox-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 8px 0;
+  border-top: 1px solid var(--line); }
+.inbox-item .why { grid-column: 1 / -1; }
+h3.sub { font-size: 13px; margin: 16px 0 4px; }
+
+.action { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 12px; margin-bottom: 12px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.action .info { flex: 1 1 280px; color: var(--muted); font-size: 12.5px; }
+.job { margin: 0 0 12px; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; }
+.job pre { font: 12px/1.4 var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  padding: 8px 10px; max-height: 260px; overflow: auto; white-space: pre-wrap; margin: 6px 0 0; }
+.spinner { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--accent);
+  animation: pulse 1s infinite ease-in-out; }
+@keyframes pulse { 50% { opacity: .25; } }
+.summary { display: grid; gap: 4px; margin-top: 6px; font-size: 13px; }
+.summary .label { font-weight: 600; margin-right: 6px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+
+nav.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); margin: 0 0 12px; }
+nav.tabs button { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none;
+  padding: 8px 12px; color: var(--muted); }
+nav.tabs button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+.toolbar input[type=text] { width: 260px; }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); white-space: nowrap; background: var(--panel); }
+td.n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.comment { color: var(--muted); }
+/* long cells stay on one line until the row is clicked */
+.clip { display: block; max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+td.comment .clip { max-width: 360px; }
+tr.expandable { cursor: pointer; }
+tr.expandable:hover td { background: var(--neutral-soft); }
+tr.open .clip { white-space: normal; overflow-wrap: anywhere; max-width: 480px; }
+img.thumb { width: 44px; height: 44px; background: #fff; border-radius: 4px; display: block; }
+tr.open img.thumb { width: 180px; height: 180px; }
+.files { color: var(--accent); font-weight: 600; white-space: nowrap; }
+.filed { margin: 4px 0 0; padding: 0; list-style: none; }
+.filed li { padding: 4px 0; border-top: 1px solid var(--line); }
+.kind { display: inline-block; min-width: 46px; margin-right: 8px; font-size: 12px; color: var(--muted); }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; white-space: nowrap;
+  background: var(--neutral-soft); }
+.badge.done { background: var(--ok-soft); color: var(--ok); }
+.badge.partial, .badge.review, .badge.awaiting_pdf, .badge.awaiting_si { background: var(--warn-soft); color: var(--warn); }
+.badge.irrelevant { background: var(--bad-soft); color: var(--bad); }
+.badge.to_read, .badge.to_triage { background: var(--accent-soft); color: var(--accent); }
+.empty { color: var(--muted); padding: 10px 2px; }
+
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;
+  display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 14px; }
+.card .structure { background: #fff; border-radius: 8px; width: 220px; height: 220px; display: grid;
+  place-items: center; color: #777; font-size: 12px; text-align: center; }
+.card .structure img { width: 220px; height: 220px; }
+.card h3 { margin: 0 0 2px; font-size: 15px; overflow-wrap: anywhere; }
+.reasons { margin: 8px 0; padding-left: 18px; }
+.reasons li { margin: 2px 0; }
+.reasons li.image { color: var(--accent); }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 8px 0; }
+.fields label { display: grid; gap: 2px; font-size: 12px; color: var(--muted); }
+.fields label.wide { grid-column: 1 / -1; }
+.fields input.changed { border-color: var(--warn); background: var(--warn-soft); }
+.decision { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.decision input { flex: 1 1 220px; }
+.message { margin-top: 6px; font-size: 13px; }
+.error { color: var(--bad); }
+.rowdrop { border: 1px dashed var(--line); border-radius: 6px; padding: 4px 10px; font-size: 12px;
+  color: var(--muted); cursor: pointer; white-space: nowrap; }
+@media (max-width: 700px) {
+  main { padding: 12px 12px 40px; }
+  #strip { padding: 8px 12px; }
+  #strip .arrow { display: none; }
+  .card { grid-template-columns: 1fr; }
+  .card .structure, .card .structure img { width: 100%; max-width: 260px; height: auto; aspect-ratio: 1; }
+  .toolbar input[type=text] { width: 100%; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Energy Level Extractor</h1>
+  <span class="meta" id="spent"></span>
+  <span class="meta" id="tools"></span>
+</header>
+<nav id="strip" aria-label="Pipeline steps"></nav>
+<main id="steps"></main>
+<input type="file" id="picker" multiple accept=".pdf,.docx,.doc,.txt" hidden>
+
+<script>
+const COLS = ["homo_dft", "lumo_dft", "dft_method", "ip", "ip_method", "ea", "ea_method"];
+const LABEL = { name: "Name", smiles: "SMILES", homo_dft: "HOMO (DFT)", lumo_dft: "LUMO (DFT)",
+  dft_method: "DFT method", ip: "IP", ip_method: "IP method", ea: "EA", ea_method: "EA method",
+  comment: "Comment", source_doi: "Source" };
+
+// the sections, in pipeline order. count: what the strip shows; hot: something waits for you;
+// auto: open unless you folded it; job: which background job reports here
+const STEPS = [
+  { key: "add", n: 1, title: "Add papers", short: "Add",
+    what: "Drop papers and their SI. Each is identified by its DOI and filed. Free.",
+    count: () => S.inbox.length || null, hot: () => S.inbox.length > 0, auto: () => true, job: "filing", body: bodyAdd,
+    data: () => [S.inbox, S.just_filed] },
+  { key: "wish", n: 2, title: "Waiting for files", short: "Waiting for files",
+    what: "Papers with no open-access PDF, or read papers that point to an SI we don't have. Drop the files on their row.",
+    count: () => S.wishlist.length, hot: () => S.wishlist.length > 0, auto: () => S.wishlist.length > 0, body: bodyWish,
+    data: () => [S.wishlist] },
+  { key: "triage", n: 3, title: "References to check", short: "To check",
+    what: "References that may hold data. Claude judges each from its abstract; the promising ones go to the reading list.",
+    count: () => S.triage.length, hot: () => false, auto: () => S.triage.length > 0, job: "triage", body: bodyTriage,
+    data: () => [S.triage] },
+  { key: "read", n: 4, title: "Reading list", short: "To read",
+    what: "Papers with their full text, ready for Claude to read. This is where money is spent.",
+    count: () => S.reading.length, hot: () => false, auto: () => true, job: "read", body: bodyRead,
+    data: () => [S.reading] },
+  { key: "review", n: 5, title: "To review", short: "To review",
+    what: "Records the checks flagged. Accept (with any corrections), reject, or have the paper read again.",
+    count: () => openReview().length, hot: () => openReview().length > 0, auto: () => openReview().length > 0, body: bodyReview,
+    data: () => [S.review, notes] },
+  { key: "results", n: 6, title: "Results", short: "Results",
+    what: "The collected data, and every paper seen so far with its status.",
+    count: () => S.data.length, hot: () => false, auto: () => false, body: bodyResults,
+    data: () => [S.data, S.papers, resultsTab] },
+];
+// what the steps print at the start of a line (pipeline.py), and what it means
+const OUTCOMES = {
+  filing: [["new ", "new paper(s) put on ④ the reading list"], ["again ", "paper(s) back on ④ the reading list"],
+    ["filed ", "paper(s) got their files"], ["left ", "file(s) couldn't be filed"],
+    ["removed ", "file(s) that couldn't be filed removed"]],
+  read: [["done ", "read, all records to ⑥ the data"], ["partial ", "read, some records to ⑤ review"],
+    ["review ", "read, all records to ⑤ review"], ["irrelevant ", "read, no usable data (irrelevant)"],
+    ["awaiting_si ", "read, but its SI is needed: in ② waiting for files"],
+    ["wish list ", "no open-access PDF: moved to ② waiting for files"], ["FAILED ", "failed (see the full output)"]],
+  triage: [["to_read ", "put on ④ the reading list"], ["irrelevant ", "judged irrelevant from the abstract"]],
+};
+
+let S = null, pollTimer = null, armed = null, logOpen = false;
+let resultsTab = sessionGet("results-tab") || "data";
+const filters = { data: "", papers: "" };
+const batch = { read: 10, triage: 50 };
+const notes = {};   // review messages by record id, kept across refreshes
+const folded = JSON.parse(sessionGet("folded") || "{}");  // sections you opened or folded yourself
+const renderers = {};  // section key -> re-renders its list only (keeps a filter box's focus)
+
+function sessionGet(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
+function sessionSet(k, v) { try { sessionStorage.setItem(k, v); } catch {} }
+
+// --- tiny DOM helper: h("tag.class", {attrs}, ...children) ---------------------------------
+function h(sel, attrs, ...kids) {
+  const [tag, ...cls] = sel.split(".");
+  const el = document.createElement(tag || "div");
+  if (cls.length) el.className = cls.join(" ");
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
+  return el;
+}
+// nested lists of elements, with null/false for "nothing here", as a flat list of elements
+const nodes = x => [x].flat(Infinity).filter(n => n != null && n !== false);
+const doiLink = d => h("a", { href: "https://doi.org/" + d, target: "_blank", rel: "noopener" }, d);
+const badge = st => h("span.badge." + st, {}, st.replace("_", " "));
+const money = x => "$" + x.toFixed(2);
+const structureUrl = s => "/api/structure.svg?smiles=" + encodeURIComponent(s);
+const openReview = () => S.review.filter(r => r.reviewed !== "reread");
+const jobKind = name => !name ? null : name.startsWith("Triag") ? "triage" : name.startsWith("Reading") ? "read" : "filing";
+
+async function api(path, body) {
+  const opts = body instanceof FormData ? { method: "POST", body }
+    : body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {};
+  const r = await fetch(path, opts);
+  let data = {};
+  try { data = await r.json(); } catch {}
+  if (!r.ok && !data.error) data.error = `${r.status} ${r.statusText}`;
+  return data;
+}
+
+async function refresh() {
+  S = await api("/api/state");
+  render();
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(refresh, S.job.running ? 1500 : 15000);
+}
+
+// --- page frame: header, step strip, sections ----------------------------------------------
+const isOpen = step => step.key in folded ? !folded[step.key] : step.auto();
+function setOpen(key, open) { folded[key] = !open; sessionSet("folded", JSON.stringify(folded)); }
+
+function render(force = false) {
+  document.getElementById("spent").textContent = `Claude API spent today: ${money(S.spent_today)}`;
+  const t = S.image_tools;
+  document.getElementById("tools").textContent = "Image check: " +
+    (t.decimer ? (t.molscribe ? "DECIMER + MolScribe" : "DECIMER only") : "not installed");
+  const working = S.job.running ? jobKind(S.job.name) : null;
+
+  document.getElementById("strip").replaceChildren(...nodes(STEPS.map((step, i) => [
+    i ? h("span.arrow", {}, "→") : null,
+    h("button" + (step.hot() ? ".hot" : ""), { title: step.title, onclick: () => {
+      setOpen(step.key, true); render(); document.getElementById("s-" + step.key).scrollIntoView({ behavior: "smooth" });
+    } }, h("span.num", {}, step.n), step.short,
+      step.count() != null ? h("span.count", {}, step.count()) : null,
+      working && step.job === working ? h("span.spinner") : null)])));
+
+  const main = document.getElementById("steps");
+  for (const step of STEPS) {
+    let sec = document.getElementById("s-" + step.key);
+    if (!sec) {
+      sec = h("section.step", { id: "s-" + step.key }, h("button.head"), h("div.body"));
+      main.append(sec);
+    }
+    const open = isOpen(step);
+    sec.className = "step" + (step.hot() ? " hot" : "") + (open ? "" : " folded");
+    const head = sec.querySelector(".head");
+    head.replaceChildren(h("span.num", {}, step.n),
+      h("span", { role: "heading", "aria-level": 2 }, h("span.title", {}, step.title), step.count() != null ? h("span.count", {}, step.count()) : null,
+        working && step.job === working ? [" ", h("span.spinner")] : null),
+      h("span.fold", {}, open ? "fold ▴" : "open ▾"),
+      h("span.what", {}, step.what));
+    head.setAttribute("aria-expanded", open);
+    head.onclick = () => { setOpen(step.key, !open); render(); };
+    const body = sec.querySelector(".body");
+    if (!open) { body.replaceChildren(); delete sec.dataset.sig; continue; }
+    const sig = JSON.stringify([step.data(), step.job === jobKind(S.job.name) ? S.job : null, S.job.running,
+      armed, batch, S.cost_per_paper]);
+    if (sec.dataset.sig === sig && !force) continue;  // unchanged: keep open rows and anything typed
+    // don't wipe what someone is typing in a box here: only the list under a filter box is redrawn,
+    // and the section is rebuilt on a later refresh (buttons don't count: clicking one focuses it)
+    if (body.contains(document.activeElement) && document.activeElement.matches("input[type=text], input[type=number]")) {
+      if (renderers[step.key]) renderers[step.key]();
+      delete sec.dataset.sig;
+      continue;
+    }
+    sec.dataset.sig = sig;
+    body.replaceChildren(...nodes(step.body()));
+  }
+}
+
+// --- the last job's report, shown in the section it acted on -------------------------------
+function jobReport(kind) {
+  const j = S.job;
+  if (!j.name || jobKind(j.name) !== kind) return null;
+  const secs = Math.round((j.finished || Date.now() / 1000) - j.started);
+  const lines = (j.log || "").split("\n");
+  const parts = OUTCOMES[kind].map(([start, meaning]) => [lines.filter(l => l.startsWith(start)).length, meaning])
+    .filter(([n]) => n).map(([n, meaning]) => h("div", {}, `${n} ${meaning}`));
+  if (kind === "read") {  // a Read files the inbox first
+    const filed = OUTCOMES.filing.map(([start, meaning]) => [lines.filter(l => l.startsWith(start)).length, meaning])
+      .filter(([n]) => n).map(([n, meaning]) => `${n} ${meaning}`);
+    if (filed.length) parts.unshift(h("div", {}, h("span.label", {}, "Inbox first:"), filed.join("; ")));
+    const images = lines.filter(l => l.trim().startsWith("image check:")).length;
+    if (images) parts.push(h("div", {}, `${images} structure(s) checked against the paper's drawings`));
+  }
+  const pre = h("pre", {}, j.log || "…");
+  const details = h("details", { open: logOpen }, h("summary", {}, "Full output, line by line"), pre);
+  details.addEventListener("toggle", () => { logOpen = details.open; });
+  setTimeout(() => { pre.scrollTop = pre.scrollHeight; });
+  return h("div.job", {},
+    h("div.row.small", {}, j.running ? h("span.spinner") : null,
+      h("strong", {}, (j.running ? "Running: " : "Last run: ") + j.name),
+      h("span.muted", {}, j.running ? `${secs} s so far` : `finished in ${secs} s, Claude API cost ${money(j.cost || 0)}`),
+      j.error ? h("span.error", {}, "stopped with an error: " + j.error) : null),
+    h("div.summary", {}, parts.length ? parts : h("span.muted", {}, j.running ? "Working…" : "Nothing to do.")),
+    details);
+}
+
+// paid steps take two clicks: the second one confirms the estimate
+function runButton(action, n, perItem, label) {
+  const cost = money(n * perItem);
+  const b = h("button" + (armed === action ? ".confirm" : action === "read" ? ".primary" : ""),
+    { disabled: n === 0 || S.job.running }, armed === action ? `Confirm: about ${cost}` : `${label} ${n}`);
+  b.onclick = async () => {
+    if (armed !== action) {
+      armed = action; render();
+      setTimeout(() => { if (armed === action) { armed = null; render(); } }, 6000);
+      return;
+    }
+    armed = null;
+    const r = await api("/api/run", { action, batch: batch[action] });
+    if (r.error) flash(action, r.error);
+    refresh();
+  };
+  return b;
+}
+function batchInput(action, unit) {
+  const input = h("input", { type: "number", min: 1, max: 50, value: batch[action] });
+  input.addEventListener("input", () => { batch[action] = Math.max(1, +input.value || 1); });
+  input.addEventListener("change", () => { input.blur(); render(); });  // update the button's count and cost
+  return h("label.small", {}, "up to ", input, " " + unit);
+}
+function flash(key, text) {
+  const body = document.querySelector(`#s-${key} .body`);
+  if (body) body.prepend(h("div.message.error", {}, text));
+}
+
+// --- tables -----------------------------------------------------------------------------------
+// rows open on click to show their long cells in full (clicks on links and drop areas don't count).
+// limit: {key, n}: show the first n rows until "Show all" is pressed, so long lists don't bury later steps
+const showAll = new Set();
+function table(cols, rows, cell, empty = "Nothing here.", limit = null) {
+  if (!rows.length) return h("div.empty", {}, empty);
+  const hidden = limit && !showAll.has(limit.key) ? rows.length - limit.n : 0;
+  if (hidden > 0) rows = rows.slice(0, limit.n);
+  const row = r => {
+    const tr = h("tr.expandable", { title: "Click to show in full" }, cols.map(c => cell(c[0], r)));
+    tr.addEventListener("click", e => { if (!e.target.closest("a, .rowdrop, input, button")) tr.classList.toggle("open"); });
+    return tr;
+  };
+  return [h("div.tablewrap", {}, h("table", {},
+    h("thead", {}, h("tr", {}, cols.map(c => h("th", {}, c[1])))),
+    h("tbody", {}, rows.map(row)))),
+    hidden > 0 ? h("button", { style: "margin-top:8px", onclick: () => { showAll.add(limit.key); render(true); } },
+      `Show all ${rows.length + hidden}`) : null];
+}
+const clip = (text, cls = "") => h("td" + cls, {}, h("span.clip", {}, text ?? ""));
+const citedBy = r => h("td", {}, r.found_in ? doiLink(r.found_in) : h("span.muted", {}, "dropped in / seed"));
+function fileLinks(r) {
+  if (!r.has_pdf && !r.si.length) return null;
+  const si = r.si.map((name, i) => h("a", { href: `/pdf/${r.doi}?si=${i + 1}`, target: "_blank", title: name },
+    r.si.length > 1 ? `SI ${i + 1}` : "SI"));
+  return h("div.small", {}, r.has_pdf ? h("a", { href: "/pdf/" + r.doi, target: "_blank" }, "Paper") : null,
+    si.map((a, i) => [i || r.has_pdf ? " · " : "", a]));
+}
+// "Title + SI", "Title", or "Title (SI)" when only the SI has arrived
+const filesSuffix = (main, nSi) => main ? (nSi ? " + SI" : "") : (nSi ? " (SI)" : "");
+const titleCell = r => h("td", {}, h("span.clip", {}, r.title || h("span.muted", {}, "title unknown"),
+  h("span.files", {}, filesSuffix(r.has_pdf, r.si.length))));
+const paperCell = (c, r) => c === "doi" ? h("td", {}, doiLink(r.doi), fileLinks(r))
+  : c === "title" ? titleCell(r) : c === "found_in" ? citedBy(r)
+  : c === "drop" ? h("td", {}, rowDrop(r.doi, r.status === "awaiting_si"))
+  : c === "needs" ? h("td", {}, h("span.badge." + r.status, {}, r.status === "awaiting_si" ? "SI" : "Paper"))
+  : c === "status" ? h("td", {}, badge(r.status))
+  : c === "updated_at" ? h("td.n.muted", {}, new Date(r.updated_at * 1000).toLocaleString())
+  : clip(r[c]);
+
+// --- ① add papers ----------------------------------------------------------------------------------
+function bodyAdd() {
+  const drop = h("div", { id: "drop", tabindex: 0 }, h("strong", {}, "Drop papers here"), " or click to choose files",
+    h("div.muted.small", {}, "Main text as PDF; supporting information (SI) as PDF, DOCX, DOC or TXT, together with ",
+      "its paper or after it. New papers go to ④ the reading list."));
+  const picker = document.getElementById("picker");
+  drop.addEventListener("click", () => picker.click());
+  drop.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") picker.click(); });
+  dropTarget(drop, files => upload(files, null, "add"));
+  const out = [drop];
+  if (S.just_filed.length) out.push(h("h3.sub", {}, "Just filed"),
+    h("ul.filed", {}, S.just_filed.map(p => h("li", {},
+      h("strong", {}, p.title || p.doi), h("span.files", {}, filesSuffix(p.main, p.si)), " ",
+      h("span.muted.small", {}, p.doi, p.main ? " · on ④ the reading list" : " · its paper is still missing")))));
+  if (S.inbox.length) {
+    out.push(h("h3.sub", {}, "Couldn't be filed"),
+      h("div.row.small", {}, h("span.muted", {}, "The reason is under each file. Pressing Read in ④ files the inbox first, " +
+        "then removes whatever still can't be filed."),
+        h("button", { disabled: S.job.running, onclick: async () => { await api("/api/inbox/file", {}); refresh(); } }, "File again"),
+        h("button.bad", { disabled: S.job.running, onclick: async () => { await api("/api/inbox/remove_all", {}); refresh(); } }, "Remove all")));
+    for (const f of S.inbox) out.push(inboxItem(f));
+  }
+  const report = jobReport("filing");
+  if (report) out.push(h("div", { style: "margin-top:12px" }, report));
+  return out;
+}
+function inboxItem(f) {
+  const known = f.why.startsWith("already have this paper");  // a copy: only removing makes sense
+  const doi = h("input", { type: "text", size: 30,
+    placeholder: f.kind === "si" ? "10.xxxx/… (DOI of its paper)" : "10.xxxx/… (DOI of this paper)" });
+  const msg = h("span.small.error");
+  return h("div.inbox-item", {},
+    h("div", {}, h("span.kind", {}, f.kind === "si" ? "(SI)" : "Paper"), h("strong", {}, f.name)),
+    h("div.row", {},
+      known ? null : doi,
+      known ? null : h("button", { onclick: async () => {
+        const r = await api("/api/inbox/assign", { name: f.name, doi: doi.value });
+        msg.textContent = r.error || ""; if (!r.error) refresh();
+      } }, "Use this DOI"),
+      h("button.bad", { onclick: async () => { await api("/api/inbox/remove", { name: f.name }); refresh(); } }, "Remove")),
+    h("div.why.muted.small", {}, f.why, " ", msg));
+}
+
+// --- ② waiting for files -------------------------------------------------------------------------
+function bodyWish() {
+  return [
+    h("p.muted.small", { style: "margin:0 0 8px" },
+      "Needs Paper: no open-access PDF was found; download it (e.g. through your library) and drop it with its SI. ",
+      "Needs SI: the paper was read and what it gave is kept, but it points to its SI for more; dropping the SI ",
+      `puts it back on ④ the reading list to be read again with it (about ${money(S.cost_per_paper)}). `,
+      h("a", { href: "/files/wishlist.csv" }, "Download wishlist.csv")),
+    table([["drop", ""], ["needs", "Needs"], ["doi", "DOI"], ["title", "Title"], ["reason", "Why"], ["found_in", "Cited by"]],
+      S.wishlist, paperCell, "Nothing is waiting for files.", { key: "wish", n: 8 }),
+  ];
+}
+function rowDrop(doi, siOnly) {
+  const picker = h("input", { type: "file", multiple: true, accept: ".pdf,.docx,.doc,.txt", hidden: true });
+  const el = h("div.rowdrop", { title: siOnly ? "Drop this paper's SI here" : "Drop the PDF (and SI) of this paper here" },
+    siOnly ? "Drop SI here" : "Drop PDF here", picker);
+  el.onclick = () => picker.click();
+  picker.onchange = () => upload(picker.files, doi, "wish");
+  dropTarget(el, files => upload(files, doi, "wish"));
+  return el;
+}
+
+// --- ③ references to check ----------------------------------------------------------------------
+function bodyTriage() {
+  const n = Math.min(S.triage.length, batch.triage);
+  return [
+    h("div.action", {}, h("div.info", {}, S.triage.length
+      ? `Checking ${n} costs about ${money(n * S.cost_per_abstract)} (≈${money(S.cost_per_abstract)} per abstract).`
+      : "No references are waiting. Reading papers in ④ finds new ones."),
+      batchInput("triage", "abstracts"), runButton("triage", n, S.cost_per_abstract, "Check")),
+    jobReport("triage"),
+    table([["doi", "DOI"], ["title", "Title"], ["found_in", "Cited by"]], S.triage, paperCell,
+      "No references waiting to be checked.", { key: "triage", n: 8 }),
+  ];
+}
+
+// --- ④ reading list -------------------------------------------------------------------------------
+function bodyRead() {
+  const n = Math.min(S.reading.length, batch.read);
+  return [
+    h("div.action", {}, h("div.info", {}, S.reading.length
+      ? `Reading ${n} costs about ${money(n * S.cost_per_paper)} (≈${money(S.cost_per_paper)} per paper). ` +
+        "Papers without an open-access PDF move to ② waiting for files instead, at no cost."
+      : "Nothing to read. Add papers in ①, or check references in ③."),
+      batchInput("read", "papers"), runButton("read", n, S.cost_per_paper, "Read")),
+    jobReport("read"),
+    table([["doi", "DOI"], ["title", "Title"], ["found_in", "Cited by"], ["reason", "Why"]], S.reading, paperCell,
+      "The reading list is empty.", { key: "read", n: 8 }),
+  ];
+}
+
+// --- ⑤ to review -----------------------------------------------------------------------------------
+function bodyReview() {
+  const open = openReview(), waiting = S.review.filter(r => r.reviewed === "reread");
+  return [
+    !open.length ? h("div.empty", {}, "Nothing to review.") : null,
+    open.map(reviewCard),
+    waiting.length ? h("p.muted.small", {}, `${waiting.length} record(s) wait for their paper to be read again in ④: `,
+      waiting.map(r => r.name).join(", ")) : null,
+  ];
+}
+function reviewCard(r) {
+  const inputs = {};
+  const field = (c, wide) => {
+    const input = h("input", { type: "text", value: r[c] ?? "" });
+    input.addEventListener("input", () => input.classList.toggle("changed", input.value !== (r[c] ?? "")));
+    inputs[c] = input;
+    return h("label" + (wide ? ".wide" : ""), {}, LABEL[c], input);
+  };
+  const reasons = (r.review_reason || "").split("; ").filter(Boolean);
+  const note = h("input", { type: "text", placeholder: "Note (optional; for Read again: what to look out for)" });
+  const msg = h("div.message", {}, notes[r.id] || "");
+  const decide = async decision => {
+    const edits = {};
+    for (const [c, input] of Object.entries(inputs)) if (input.value !== (r[c] ?? "")) edits[c] = input.value;
+    const res = await api("/api/review", { id: r.id, decision, note: note.value, edits: decision === "accept" ? edits : {} });
+    notes[r.id] = res.error || (res.messages || []).join("; ");
+    msg.textContent = notes[r.id];
+    document.activeElement.blur();
+    refresh();
+  };
+  return h("div.card", {},
+    h("div.structure", {}, r.smiles && r.smiles !== "n/a"
+      ? h("img", { src: structureUrl(r.smiles), alt: r.smiles }) : "No structure"),
+    h("div", {},
+      h("h3", {}, r.name),
+      h("div.row.small", {}, doiLink(r.source_doi),
+        h("a", { href: "/pdf/" + r.source_doi, target: "_blank" }, "Open PDF"), h("span.muted", {}, "record #" + r.id)),
+      h("ul.reasons", {}, reasons.map(x => h("li" + (x.startsWith("image check:") ? ".image" : ""), {}, x))),
+      h("div.fields", {}, field("name", true), field("smiles", true), COLS.map(c => field(c)), field("comment", true)),
+      h("div.decision", {}, note,
+        h("button.ok", { onclick: () => decide("accept") }, "Accept"),
+        h("button.bad", { onclick: () => decide("reject") }, "Reject"),
+        h("button", { onclick: () => decide("reread") }, "Read again")),
+      msg));
+}
+
+// --- ⑥ results: collected data and all papers, as tabs ------------------------------------------
+function bodyResults() {
+  const tabs = [["data", "Collected data", S.data.length], ["papers", "All papers", S.papers.length]];
+  const nav = h("nav.tabs", {}, tabs.map(([key, label, n]) =>
+    h("button" + (key === resultsTab ? ".active" : ""), { onclick: () => {
+      resultsTab = key; sessionSet("results-tab", key); render();
+    } }, label, h("span.count", {}, n))));
+  const list = h("div");
+  const input = h("input", { type: "text", value: filters[resultsTab],
+    placeholder: resultsTab === "data" ? "Filter by name, SMILES, method or DOI" : "Filter by DOI, title or status" });
+  input.addEventListener("input", () => { filters[resultsTab] = input.value; renderers.results(); });
+  const csv = resultsTab === "data" ? "data.csv" : "reading_list.csv";
+  const matches = (r, keys) => !filters[resultsTab] ||
+    keys.some(k => String(r[k] ?? "").toLowerCase().includes(filters[resultsTab].toLowerCase()));
+  renderers.results = () => list.replaceChildren(...nodes(resultsTab === "data"
+    ? table([["structure", ""], ["name", "Name"], ...COLS.map(c => [c, LABEL[c]]), ["comment", "Comment"], ["source_doi", "Source"]],
+      S.data.filter(r => matches(r, ["name", "smiles", "dft_method", "ip_method", "ea_method", "source_doi"])), dataCell,
+      "No data collected yet.")
+    : table([["doi", "DOI"], ["title", "Title"], ["status", "Status"], ["reason", "Why"], ["found_in", "Cited by"], ["updated_at", "Updated"]],
+      S.papers.filter(r => matches(r, ["doi", "title", "status", "reason", "found_in"])), paperCell)));
+  renderers.results();
+  return [nav, h("div.toolbar", {}, input, h("a.button", { href: "/files/" + csv }, "Download " + csv)), list];
+}
+function dataCell(c, r) {
+  if (c === "structure") return h("td", {}, r.smiles && r.smiles !== "n/a"
+    ? h("img.thumb", { src: structureUrl(r.smiles), loading: "lazy", alt: r.smiles, title: r.smiles }) : "");
+  if (c === "source_doi") return h("td", {}, doiLink(r.source_doi));
+  if (c === "name") return h("td", {}, h("strong.clip", {}, r.name), r.reviewed ? h("div.muted.small", {}, r.reviewed + " in review") : null);
+  if (["homo_dft", "lumo_dft", "ip", "ea"].includes(c)) return h("td.n", {}, r[c] ?? "");
+  return clip(r[c], c === "comment" ? ".comment" : "");
+}
+
+// --- dropping files ------------------------------------------------------------------------------
+async function upload(files, doi, where) {
+  if (!files || !files.length) return;
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f);
+  if (doi) fd.append("doi", doi);
+  const r = await api("/api/upload", fd);
+  await refresh();
+  if (r.error) flash(where, r.error);
+  else if (!r.filing) flash(where, "Saved in the inbox; they'll be filed when the current job is done.");
+}
+function dropTarget(el, onFiles) {
+  el.addEventListener("dragover", e => { e.preventDefault(); el.classList.add("over"); });
+  el.addEventListener("dragleave", () => el.classList.remove("over"));
+  el.addEventListener("drop", e => { e.preventDefault(); el.classList.remove("over"); onFiles(e.dataTransfer.files); });
+}
+const picker = document.getElementById("picker");
+picker.addEventListener("change", () => { upload(picker.files, null, "add"); picker.value = ""; });
+
+refresh();
+</script>
+</body>
+</html>

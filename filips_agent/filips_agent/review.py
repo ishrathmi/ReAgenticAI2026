@@ -59,8 +59,13 @@ def _clean(column, value, old):
 
 def apply(ledger, path=REVIEW_FILE):
     """Apply the decisions in review.csv. Returns one message per decision."""
+    return apply_rows(ledger, read_decisions(path))
+
+
+def apply_rows(ledger, rows):
+    """Apply decisions given as review.csv rows ({"id", "decision", "note", edited columns})."""
     messages, touched, reread = [], set(), set()
-    for row in read_decisions(path):
+    for row in rows:
         decision = DECISIONS.get(row["decision"].strip().lower())
         note = (row.get("note") or "").strip() or None
         try:
