@@ -9,7 +9,7 @@
     python -m filips_agent run [--batch 10]                 inbox, extract, triage, export
     python -m filips_agent review                           apply decisions typed into review.csv
     python -m filips_agent reprocess                        rebuild records from saved extractions (no API)
-    python -m filips_agent images [--doi D] [--si]          check structures against the paper's drawings
+    python -m filips_agent images [--doi D] [--si] [--all]  check structures in review against the paper's drawings
     python -m filips_agent status                           counts per status
     python -m filips_agent export                           write the CSV tables to data/output/
 """
@@ -34,6 +34,7 @@ def do_inbox(ledger, use_llm=True):
 
 
 def do_extract(ledger, batch, model=None):
+    checked = []  # image checks of structures sent to review
     for source in ledger.queue(TO_READ, batch):
         doi = source["doi"]
         if not fetch.acquire(ledger, doi):
@@ -46,6 +47,16 @@ def do_extract(ledger, batch, model=None):
             continue
         print(f"{r['status']:10} {doi}  compounds: {r['compounds']}, passes: {r['passes']}, "
               f"new references: {r['new_references']}, ${r['cost_usd']:.2f}")
+        try:
+            rows = ocsr.check_flagged(ledger, doi)
+        except ocsr.ToolsMissing as e:
+            print(f"           {e}")
+            continue
+        checked += rows
+        for row in rows:
+            print(f"           image check: {row['verdict']} for {row['compound']} ({row['figure']}, {row['picked_by']})")
+    if checked:
+        print(f"image check report written to {ocsr.write_report(checked)}")
     fetch.INBOX.mkdir(parents=True, exist_ok=True)
 
 
@@ -59,18 +70,26 @@ def apply_and_export(ledger):
         print(f"could not open {e.filename}; close it (e.g. in Excel) and run again")
 
 
-def do_images(ledger, doi=None, si=False, refresh=False):
+def do_images(ledger, doi=None, si=False, refresh=False, everything=False):
     tools = ocsr.available()
     if not tools["decimer"]:
         print("the image tools aren't installed; see ocsr/README.md")
         return
     if not tools["molscribe"]:
         print("MolScribe isn't installed: DECIMER only")
-    dois = [doi] if doi else [json.loads(p.read_text(encoding="utf-8"))["doi"]
-                              for p in sorted(extractor.EXTRACTIONS.glob("*.json"))]
+    if everything:
+        dois = [doi] if doi else [json.loads(p.read_text(encoding="utf-8"))["doi"]
+                                  for p in sorted(extractor.EXTRACTIONS.glob("*.json"))]
+        targets = dict.fromkeys(dois)
+    else:
+        targets = ocsr.flagged_structures(ledger, doi, unchecked=not refresh)
+        if not targets:
+            print("no unchecked records in review for a structure reason "
+                  "(--refresh to check them again, --all for every compound)")
+            return
     rows = []
-    for d in dois:
-        found = ocsr.check_paper(d, si, refresh)
+    for d, only in targets.items():
+        found = ocsr.check_paper(d, si, refresh, only)
         rows += found
         for r in found:
             print(f"{r['verdict']:36} {r['compound'][:24]:24} {r['figure']}, {r['picked_by']}  ({d})")
@@ -103,6 +122,8 @@ def main(argv=None):
     s.add_argument("--doi", help="one paper (default: every paper read so far)")
     s.add_argument("--si", action="store_true", help="also look in the SI PDFs")
     s.add_argument("--refresh", action="store_true", help="read the drawings again instead of using the cache")
+    s.add_argument("--all", action="store_true", dest="everything",
+                   help="every compound, not only those in review for a structure reason")
     a = p.parse_args(argv)
     started = time.time()
 
@@ -147,7 +168,7 @@ def main(argv=None):
         elif a.cmd in ("export", "review"):
             apply_and_export(ledger)
         elif a.cmd == "images":
-            do_images(ledger, a.doi, a.si, a.refresh)
+            do_images(ledger, a.doi, a.si, a.refresh, a.everything)
 
     spent = llm.total_cost(since=started)
     if spent:

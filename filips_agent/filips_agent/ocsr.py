@@ -1,6 +1,8 @@
 """Check the extractor's structures against the paper's own drawings (PLAN.md structures route 3).
 
-For every compound of a read paper (from its saved extraction):
+A fallback for structures the other routes couldn't settle: after a paper is extracted, its
+compounds sent to review for a structure reason (flagged_structures) are checked (check_flagged);
+`images` redoes this by hand. For each (from its saved extraction):
 1. figures.find_figures: the figures whose captions name it or show structures/syntheses;
 2. DECIMER Segmentation cuts out each chemical drawing on those pages; the label next to each
    drawing is read from the text layer or by OCR, and figures.pick chooses the compound's one;
@@ -173,14 +175,58 @@ def _drawings_on(doc, page, cached):
     return out
 
 
-def check_paper(doi, si=False, refresh=False):
-    """Image check of every compound in a read paper. Returns report rows."""
+# review reasons (extractor.py, normalize_values.py, resolve.py) that the image check can help with
+STRUCTURE_REASONS = ("no structure", "structure uncertain", "structure:", "reported formula",
+                     "lookups give different structures", "structure not from the paper")
+
+
+def flagged_structures(ledger, doi=None, unchecked=False):
+    """{doi: [record name, ...]} of records in review for a structure reason.
+
+    unchecked: leave out records that already carry an image-check note.
+    """
+    out = {}
+    for rec in ledger.records("review"):
+        if doi is not None and rec["source_doi"] != clean_doi(doi):
+            continue
+        parts = (rec["review_reason"] or "").split("; ")
+        if unchecked and any(p.startswith("image check:") for p in parts):
+            continue
+        if any(p.startswith(STRUCTURE_REASONS) for p in parts):
+            out.setdefault(rec["source_doi"], []).append(rec["name"] or "")
+    return out
+
+
+def check_flagged(ledger, doi):
+    """Image check of one paper's records in review for a structure reason, run right after extraction.
+
+    Notes the results in their review reasons and returns the report rows; [] if there is
+    nothing to check. Raises ToolsMissing when there is, but DECIMER isn't installed.
+    """
+    only = flagged_structures(ledger, doi).get(clean_doi(doi))
+    if not only:
+        return []
+    if not available()["decimer"]:
+        raise ToolsMissing("image check skipped: DECIMER isn't installed (see ocsr/README.md)")
+    rows = check_paper(doi, only=only)
+    note_in_review(ledger, rows)
+    return rows
+
+
+class ToolsMissing(RuntimeError):
+    """The image tools aren't installed."""
+
+
+def check_paper(doi, si=False, refresh=False, only=None):
+    """Image check of the compounds in a read paper (only: record names to limit it to). Returns report rows."""
     doi = clean_doi(doi)
     saved = DATA_DIR / "extractions" / f"{doi_slug(doi)}.json"
     if not saved.exists():
         return []
     compounds = []
     for c in json.loads(saved.read_text(encoding="utf-8"))["result"]["compounds"]:
+        if only is not None and not any(figures.mentions(r, n) for r in only for n in c["names"]):
+            continue
         smiles, _ = canonicalize(c["smiles"]) if c["smiles"] else (None, None)
         names = c["names"] + ([c["label_in_paper"]] if c["label_in_paper"] else [])
         compounds.append({"names": names, "smiles": smiles, "reported_formula": c["reported_formula"],

@@ -80,6 +80,49 @@ def test_check_paper_picks_the_labelled_drawing_and_caches(paper):
     assert paper == ["decimer", "molscribe"]  # second time from the cache
 
 
+def test_check_paper_only_checks_the_named_compounds(paper):
+    assert ocsr.check_paper("10.1000/x", only=["F-6"]) == []
+    assert [r["compound"] for r in ocsr.check_paper("10.1000/x", only=["T-6, thiophene"])] == ["T-6"]
+
+
+def record(name):
+    rows, _ = normalize_record({"names": [name], "smiles": THIOPHENE_C6, "source_doi": "10.1000/x",
+                                "values": [{"label": "IP", "value": 5.4, "origin": "measured", "technique": "UPS"}]})
+    return rows
+
+
+def test_only_records_in_review_for_a_structure_reason_are_flagged(tmp_path):
+    with Ledger(tmp_path / "l.db") as lg:
+        lg.add("10.1000/x")
+        lg.save_compounds("10.1000/x", [(record("T-6"), ["structure uncertain (P3c): mixture"]),
+                                        (record("F-6"), ["IP: outside the usual range"]),
+                                        (record("D-6"), [])])
+        assert ocsr.flagged_structures(lg) == {"10.1000/x": ["T-6"]}
+        assert ocsr.flagged_structures(lg, "10.1000/other") == {}
+
+
+def test_check_flagged_notes_the_result_once_after_extraction(paper, tmp_path):
+    with Ledger(tmp_path / "l.db") as lg:
+        lg.add("10.1000/x")
+        lg.save_compounds("10.1000/x", [(record("T-6"), ["structure uncertain (P3c): mixture"])])
+        [row] = ocsr.check_flagged(lg, "10.1000/x")
+        assert row["compound"] == "T-6"
+        [rec] = lg.records("review")
+        assert rec["review_reason"].endswith("; image check: matches (Figure 1 (p. 1), label)")
+        assert ocsr.flagged_structures(lg, unchecked=True) == {}  # `images` won't redo it
+
+
+def test_check_flagged_needs_tools_only_when_something_is_flagged(paper, tmp_path, monkeypatch):
+    monkeypatch.setattr(ocsr, "available", lambda: {"decimer": False, "molscribe": False})
+    with Ledger(tmp_path / "l.db") as lg:
+        lg.add("10.1000/x")
+        lg.save_compounds("10.1000/x", [(record("T-6"), [])])
+        assert ocsr.check_flagged(lg, "10.1000/x") == []
+        lg.save_compounds("10.1000/x", [(record("T-6"), ["no structure"])])
+        with pytest.raises(ocsr.ToolsMissing):
+            ocsr.check_flagged(lg, "10.1000/x")
+
+
 def test_result_goes_into_the_review_reason(tmp_path):
     with Ledger(tmp_path / "l.db") as lg:
         lg.add("10.1000/x")

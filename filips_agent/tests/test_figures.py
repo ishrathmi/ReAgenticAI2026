@@ -57,4 +57,4 @@ def test_pick_by_label_then_final_product_then_all():
     assert figures.pick([a, b], ["IT-M"], "figure") == ([b], "label")
     first, last = drawing(300, 0), drawing(0, 200)  # second row: later in the reaction sequence
     assert figures.pick([first, last], ["IT-M"], "scheme") == ([last], "final product of scheme")
-    assert figures.pick([a, first], ["IT-M"], "figure") == ([a, first], "unlabelled; all candidates")
+    assert figures.pick([a, first], ["IT-M"], "figure") == ([a, first], "unlabelled, all candidates")

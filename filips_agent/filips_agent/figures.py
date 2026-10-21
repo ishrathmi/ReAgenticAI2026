@@ -133,4 +133,4 @@ def pick(drawings, names, kind):
         # reading order: rows top to bottom, then left to right; the last one is the final product
         last = max(drawings, key=lambda d: (round((d.rect[1] + d.rect[3]) / 2 / 60), d.rect[0]))
         return [last], "final product of scheme"
-    return list(drawings), "unlabelled; all candidates"
+    return list(drawings), "unlabelled, all candidates"
