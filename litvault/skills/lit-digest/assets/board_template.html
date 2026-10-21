@@ -121,6 +121,21 @@ body.is-dragging .bin{padding:16px 16px;border-style:dashed;border-color:var(--v
 .toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,20px);opacity:0;z-index:30;background:var(--ink);color:var(--bg);border-radius:10px;padding:9px 12px 9px 14px;display:flex;gap:12px;align-items:center;font-size:13px;transition:opacity .2s,transform .2s;pointer-events:none;max-width:calc(100vw - 32px)}
 .toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
 .toast button{background:transparent;color:var(--bg);border-color:color-mix(in srgb,var(--bg) 40%,transparent);padding:3px 10px}
+/* wide screens: the vault dock is a vertical sidebar on the right; narrow screens keep the bottom bar */
+@media (min-width:901px){
+  body{padding-bottom:40px;padding-right:var(--side-w)}
+  :root{--side-w:236px}
+  .dock{left:auto;right:0;top:0;bottom:0;width:var(--side-w);border-top:none;border-left:1px solid var(--line);padding:16px 14px;display:flex;flex-direction:column}
+  .dock-label{margin-bottom:10px}
+  .dock-row{flex-direction:column;overflow-x:hidden;overflow-y:auto;flex:1;padding:2px 4px 2px 2px}
+  .bin{min-width:0;width:100%}
+  .bin .bname{max-width:none;flex:1;min-width:0}
+  .bin.new{position:sticky;right:auto;bottom:0;margin-top:auto;box-shadow:0 -12px 12px -6px var(--dock-bg);justify-content:center}
+  body.is-dragging .dock{padding-top:16px;padding-bottom:16px;box-shadow:-10px 0 30px rgba(0,0,0,.08)}
+  body.is-dragging .bin{padding:18px 14px}
+  .bin.hot{transform:translateX(-6px) scale(1.04)}
+  .toast{bottom:24px;left:calc((100% - var(--side-w)) / 2)}
+}
 @media (max-width:900px){.lanes{grid-template-columns:1fr}.lane-body{max-height:none}}
 @media (max-width:600px){header,.toolbar,main,.dock{padding-left:16px;padding-right:16px}h1{font-size:22px}.bin{min-width:120px}}
 /* research profile: keyword bar + editor */
@@ -627,10 +642,13 @@ function track(x, y){
 
 function autoScroll(){
   if(!drag) return;
-  const [x, y] = lastXY, dockTop = $('#dock').getBoundingClientRect().top, edge = 70;
+  const [x, y] = lastXY, dr = $('#dock').getBoundingClientRect(), edge = 70;
+  // the dock is a right-hand sidebar on wide screens and a bottom bar on narrow ones
+  const side = dr.top < innerHeight / 2, bottom = side ? innerHeight : dr.top;
   let dy = 0;
-  if(y < edge + 50) dy = -Math.ceil((edge + 50 - y) / 5);
-  else if(y > dockTop - edge && y < dockTop) dy = Math.ceil((y - (dockTop - edge)) / 5);
+  if(side && x >= dr.left) dy = 0;  // hovering the sidebar: aim at a vault, don't scroll the page
+  else if(y < edge + 50) dy = -Math.ceil((edge + 50 - y) / 5);
+  else if(y > bottom - edge && y < bottom) dy = Math.ceil((y - (bottom - edge)) / 5);
   if(dy){ window.scrollBy(0, dy); track(x, y) }
   // scroll inside an overflowing lane body
   const body = drag.lane?.querySelector('.lane-body');
