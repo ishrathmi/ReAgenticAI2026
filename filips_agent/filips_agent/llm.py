@@ -16,7 +16,7 @@ from .ledger import DATA_DIR
 
 MODELS = {
     "inbox": "claude-haiku-5-5",
-    "triage": "claude-opus-5-5",   # until the triage trial decides
+    "triage": "claude-opus-5-5",   # trial 2026-10-21: Haiku dropped relevant papers, Sonnet over-read
     "extract": "claude-opus-5-5",
 }
 

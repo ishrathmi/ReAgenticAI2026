@@ -28,6 +28,7 @@ Raw record (one compound, as produced by the extractor agent):
       ],
     }
 """
+import re
 
 NA = "n/a"
 FC_ANCHOR = 4.8  # eV, Fc/Fc+ vs vacuum (P6b)
@@ -81,6 +82,12 @@ def method_label(technique, reference=None, fc_anchor=None, plus_eg=False):
     return label + " + Eg" if plus_eg else label
 
 
+def basis_set_notation(method):
+    """P5: Pople basis sets in (d)/(d,p) notation, e.g. 6-31G** -> 6-31G(d,p), 6-31+G* -> 6-31+G(d)."""
+    method = re.sub(r"(\d-\d+\+*G)\*\*", r"\1(d,p)", method)
+    return re.sub(r"(\d-\d+\+*G)\*", r"\1(d)", method)
+
+
 def _fmt(x):
     return f"{x:.2f}"
 
@@ -88,8 +95,8 @@ def _fmt(x):
 def normalize_record(raw):
     """Return (rows, issues): one W2 row per measurement set, "n/a" for missing data.
 
-    W2c: measured values are grouped by their "set" into separate rows; DFT values go
-    on the first row only. Issues are reasons to send the compound to human review.
+    W2c: measured values are grouped by their "set"; sets share a row unless two of them
+    fill the same column, then each gets its own row. DFT values go on the first row only. Issues are reasons to send the compound to human review.
     """
     base = {c: NA for c in COLUMNS}
     names = [n.strip() for n in raw.get("names") or [] if n and n.strip()]
@@ -125,7 +132,7 @@ def normalize_record(raw):
                 continue
             dft[field] = _fmt(-abs(energy))  # P5a
             if v.get("dft_method"):
-                dft_methods.append(v["dft_method"].strip())
+                dft_methods.append(basis_set_notation(v["dft_method"].strip()))
             else:
                 issues.append(f"{tag}: computational method not stated")
             if v.get("detail"):
@@ -154,9 +161,19 @@ def normalize_record(raw):
         if v.get("detail"):
             group["notes"].append(f"{tag}: {v['detail'].strip()}")
 
+    # sets share a row unless they'd put two values in one column; ip and ea carry their own methods
+    packed = []
+    for group in sets.values():
+        row_group = next((g for g in packed if not g["values"].keys() & group["values"].keys()), None)
+        if row_group is None:
+            packed.append({"values": dict(group["values"]), "notes": list(group["notes"])})
+        else:
+            row_group["values"].update(group["values"])
+            row_group["notes"] += group["notes"]
+
     extra = (raw.get("comment") or "").strip()
     rows = []
-    for i, group in enumerate(list(sets.values()) or [{"values": {}, "notes": []}]):
+    for i, group in enumerate(packed or [{"values": {}, "notes": []}]):
         row = dict(base, **group["values"])
         notes = group["notes"]
         if i == 0:

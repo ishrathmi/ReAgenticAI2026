@@ -33,7 +33,7 @@ What the agent extracts and how it decides. Rules are numbered so that code, pro
 **P4.** If the compound is named other than by a number (e.g. *1*, *1c*), report the name. It may be a full structural name (e.g. "Poly(3-hexylthiophene-2,5-diyl)"), a descriptive name (e.g. "Fullerene") or an abbreviation (e.g. "P(NDI2OD-T2)", "Y6", "PBQx-TF").
 - **P4a.** If several names are used, report all of them as synonyms, separated by commas.
 
-**P5.** For HOMO/LUMO obtained computationally (density functional theory, DFT), report the computational method: functional and basis set, e.g. B3LYP/6-31G(d,p). Also include any other important method information, likely to be unusual.
+**P5.** For HOMO/LUMO obtained computationally (density functional theory, DFT), report the computational method: functional and basis set, e.g. B3LYP/6-31G(d,p). Pople basis sets are always written in (d)/(d,p) notation, whatever the paper uses: 6-31G* → 6-31G(d), 6-31G** → 6-31G(d,p). Also include any other important method information, likely to be unusual. Simplified side chains (e.g. alkyl chains replaced by methyl or H) are common practice and are not mentioned.
 - **P5a.** Report HOMO/LUMO as negative values in eV.
 - **P5b.** If DFT is discussed but values are only shown in a figure, read figure captions to find the relevant figure, then read the values from it.
 - **P5c.** IP/EA calculated by DFT are not collected.
@@ -72,7 +72,7 @@ Sub-rules:
 `name,smiles,homo_dft,lumo_dft,dft_method,ip,ip_method,ea,ea_method,comment,source_doi`
 - **W2a.** If the SMILES has already been reported, check that the names agree. If they don't, mark for human review. After review, sync names so all synonyms are reported (e.g. "P(NDI2OD-T2)" and "PNDI2OD-T2" become "PNDI2OD-T2, P(NDI2OD-T2)").
 - **W2b.** If the name has already been reported, check that the SMILES agree. If they don't, mark for human review.
-- **W2c.** If a compound has values from several measurements (e.g. film and solution, or CV and UPS), each set of values goes on its own row. DFT values appear on the first row only.
+- **W2c.** If a compound has values from several measurements (e.g. film and solution, or CV and UPS), each set of values goes on its own row when the sets would otherwise fill the same column (e.g. two IPs). Sets that fill different columns share a row, since IP and EA each carry their own method (e.g. an IP with no stated method next to a CV EA). DFT values appear on the first row only.
 
 **W3. Sorting is per compound, status is per paper.** Each compound record is sorted on its own: complete and unflagged records go to the **data** table, flagged ones (P3c, P3e, P6f, P7c, W2a, W2b) go to the **review** table with the reason. A paper's status follows from its compounds:
 

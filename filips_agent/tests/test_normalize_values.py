@@ -1,6 +1,7 @@
 import pytest
 
-from filips_agent.normalize_values import NA, method_label, normalize_record, reanchor, to_ev
+from filips_agent.normalize_values import (NA, basis_set_notation, method_label, normalize_record,
+                                           reanchor, to_ev)
 
 
 def cv(label, value, anchor=4.8, **kw):
@@ -132,10 +133,40 @@ def test_cv_and_ups_give_two_rows():
     assert issues == []
 
 
+def test_sets_that_fill_different_columns_share_a_row():  # e.g. bisPCBM, 10.1002/adma.200702438
+    no_method = {"label": "HOMO", "value": 6.1, "origin": "measured", "technique": None}
+    row, issues = one_row(record(cv("LUMO", 3.7, set="CV"), no_method))
+    assert (row["ip"], row["ip_method"], row["ea"], row["ea_method"]) == ("6.10", "arbitrary", "3.70", "CV")
+    assert issues == []
+
+
+def test_ups_ip_and_cv_ea_share_a_row():
+    ups = {"label": "IP", "value": 5.60, "origin": "measured", "technique": "UPS", "set": "UPS"}
+    row, _ = one_row(record(cv("LUMO", -3.70, set="CV"), ups))
+    assert (row["ip_method"], row["ea_method"]) == ("UPS", "CV")
+
+
 def test_two_values_in_one_set_go_to_review_and_first_is_kept():
     rows, issues = normalize_record(record(cv("HOMO", -5.40), cv("HOMO", -5.55)))
     assert [r["ip"] for r in rows] == ["5.40"]
     assert any("more than one value" in i for i in issues)
+
+
+@pytest.mark.parametrize("printed, reported", [
+    ("B3LYP/6-31G*", "B3LYP/6-31G(d)"),
+    ("B3LYP/6-31G**", "B3LYP/6-31G(d,p)"),
+    ("B3LYP/6-311+G*", "B3LYP/6-311+G(d)"),
+    ("B3LYP/6-311++G**", "B3LYP/6-311++G(d,p)"),
+    ("B3LYP/6-31G(d,p)", "B3LYP/6-31G(d,p)"),
+    ("PBE0/def2-SVP", "PBE0/def2-SVP"),
+])
+def test_basis_set_notation(printed, reported):  # P5
+    assert basis_set_notation(printed) == reported
+
+
+def test_dft_method_uses_d_p_notation():
+    row, _ = one_row(record(dft("HOMO", -5.2, method="B3LYP/6-31G*")))
+    assert row["dft_method"] == "B3LYP/6-31G(d)"
 
 
 def test_two_dft_values_for_one_column_go_to_review():
