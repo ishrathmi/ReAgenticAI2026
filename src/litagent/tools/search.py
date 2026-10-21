@@ -18,6 +18,9 @@ HEADERS = {"User-Agent": "litagent/0.1 (ReAgenticAI2026 academic workshop)"}
 def search(query: str, source: str = "chemrxiv", limit: int = 10) -> list:
     if source == "chemrxiv":
         return search_chemrxiv(query, limit)
+    if source in ("europepmc", "europe pmc", "epmc"):
+        from .europepmc import search as search_epmc
+        return search_epmc(query, limit)
     raise NotImplementedError(f"Search source '{source}' is not implemented yet")
 
 

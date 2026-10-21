@@ -2,19 +2,16 @@
 
   python run_agent.py --profile peptide_solubility --dry-run   # preview; no API calls
   python run_agent.py --profile peptide_solubility             # extract and write the database
+  python run_agent.py --profile peptide_solubility --agent     # then run the review agent
 """
 
 from __future__ import annotations
 
 import argparse
-import re
-import os
 import sys
 
-from . import agent, output
-from .config import ROOT, load_profile
-from .models import CachedModel, OpenRouterModel
-from .runlog import RunLogger
+from .config import load_profile
+from .runner import run_profile
 
 
 def main(argv=None, model=None) -> int:
@@ -23,45 +20,41 @@ def main(argv=None, model=None) -> int:
     ap.add_argument("--profile", help="folder under config/ (e.g. peptide_solubility)")
     ap.add_argument("--model", help="OpenRouter model ID (overrides profile and .env)")
     ap.add_argument("--dry-run", action="store_true", help="parse and prefilter only; no API calls")
+    ap.add_argument("--agent", dest="agent", action="store_true", default=None,
+                    help="run the review agent after the pipeline (default: agent.enabled in the profile)")
+    ap.add_argument("--no-agent", dest="agent", action="store_false", help="pipeline only")
+    ap.add_argument("--agent-model", help="OpenRouter model ID for the review agent (overrides agent.model)")
     args = ap.parse_args(argv)
 
     cfg, schema = load_profile(args.profile)
-    out = cfg.get("output", {})
-    log = None
-    if model is None and not args.dry_run:
-        model_id = args.model or cfg.get("model") or os.getenv("OPENROUTER_MODEL")
-        llm = cfg.get("llm", {})
-        inner = OpenRouterModel(model_id)
-        log = RunLogger(str(ROOT / out.get("dir", "outputs") / "runs"), args.profile or "", inner.model, ROOT)
-        model = CachedModel(inner, str(ROOT / llm.get("cache_dir", ".cache/llm")),
-                            llm.get("max_calls_per_run", 200), logger=log)
+    acfg = cfg.setdefault("agent", {}) or {}
+    if args.agent_model:
+        acfg["model"] = args.agent_model
+    use_agent = acfg.get("enabled", False) if args.agent is None else args.agent
 
-    try:
-        records, files = agent.run(cfg, schema, model, root=ROOT, dry_run=args.dry_run, log=log)
-    except BaseException as exc:          # includes Ctrl-C: still save the timing summary
-        if log:
-            log.finish(status=f"failed: {type(exc).__name__}")
-        raise
+    r = run_profile(cfg, schema, profile=args.profile or "", model=model, model_id=args.model,
+                    use_agent=use_agent, dry_run=args.dry_run)
     if args.dry_run:
         print("\nDry run complete; no API calls made.")
         return 0
-
-    basename = out.get("basename", args.profile or "records")
-    model_id = getattr(model, "model", "")
-    if model_id and out.get("model_in_filename", True):      # keep one output file per model for comparison
-        basename += "__" + re.sub(r"[^A-Za-z0-9.]+", "-", model_id).strip("-")
-    csv_path, xlsx_path = output.write(records, files, schema, str(ROOT / out.get("dir", "outputs")), basename)
-    flagged = sum(1 for r in records if r.get("needs_review"))
-    print(f"\n{len(records)} records ({flagged} flagged for review)")
-    print(f"CSV:   {csv_path}\nExcel: {xlsx_path}")
-    if log:
-        stopped = any(str(f.get("status", "")).startswith("stopped") for f in files)
-        s = log.finish("stopped: call budget" if stopped else "ok", len(files), len(records), flagged)
+    p = r["pipeline"]
+    print(f"\n{p['records']} records ({p['flagged']} flagged for review)\nCSV:   {p['csv']}\nExcel: {p['xlsx']}")
+    if r.get("agent"):
+        a, s = r["agent"], r["agent"]["summary"]
+        print(f"\nAfter review agent: {s['records_after_agent']} records ({s['flagged_after_agent']} flagged); "
+              f"{s['agent_records_changed']} changed, {s['agent_records_added']} added, "
+              f"{s['agent_records_rejected']} rejected; {s['agent_accepted']}/{s['agent_tasks']} tasks finished")
+        print(f"CSV:   {a['csv']}\nExcel: {a['xlsx']}")
+    s = r.get("run")
+    if s:
         print(f"Wall time {s['wall_time_s']} s; inference {s['inference_time_s']} s "
               f"({s['inference_share']:.0%}) over {s['llm_calls']} calls "
               f"(mean {s['mean_latency_s']} s, max {s['max_latency_s']} s; {s['cache_hits']} cached)")
         print(f"Tokens in/out: {s['tokens_in']}/{s['tokens_out']}; cost: ${s['cost_usd']}")
-        print(f"Run log: {log.path}\nAll runs: {log.dir / 'runs.csv'}")
+        for ph in ("extract", "repair", "agent"):
+            if s.get(f"{ph}_calls"):
+                print(f"  {ph:<8} {s[f'{ph}_calls']} calls, {s[f'{ph}_inference_s']} s, ${s.get(f'{ph}_cost_usd') or 0}")
+        print(f"Run log: {r['log_path']}\nAll runs: {r['runs_csv']}")
     return 0
 
 

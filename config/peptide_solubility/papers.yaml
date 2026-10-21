@@ -14,14 +14,30 @@ queries: []                         # open-access search; uncomment to use
 #  - {source: chemrxiv, query: "peptide solubility", limit: 5}
 #  - {source: chemrxiv, query: "peptide aggregation aqueous solubility", limit: 5}
 download_dir: .cache/papers         # downloaded PDFs (git-ignored)
+store:
+  path:                             # paper store (SQLite); empty = ~/.cache/litagent/papers.sqlite.
+                                    # Keep it outside OneDrive/Dropbox: sync clients can corrupt databases.
 
 # Main text and SI of the same paper: list a quoted file-name fragment for each file.
 # Records that name a peptide only by label ("variant 3") get the sequence from any
 # table with a "sequence" column in the same group. Files not listed form their own group.
 paper_groups:
-  camsol_ptm_natcommun_2023:
+  camsol_ptm_natcommun_2023:              # Oeller et al., Nat Commun 2023: main text + SI (PDF, XLSX)
     - "s41467-023-42940"
     - "41467_2023_42940"
+  dipeptides_jmolliq_2024:                # Sequence-dependent dipeptide solubility, J Mol Liq 2024: main text + SI (DOCX)
+    - "deqeunce depenent"
+    - "S0167732224007980"
+  protecting_groups_acsomega_2026:        # Li, Verma, Heng, ACS Omega 2026: main text + SI
+    - "the effect of protecting groups"
+    - "ao6c05745"
+  solubility_limits_jpcb_2018:            # Sarma et al., Peptide Solubility Limits, J Phys Chem B: main text + SI
+    - "peptide solubility limits"
+    - "jp7b10734"
+  stapling_chemsci_2018:                  # Li et al., dithiocarbamate stapling, Chem Sci: main text + SI
+    - "c8sc03275k"
+  # Single files (no SI in data/papers): d2sc02670h.pdf (isobactins, Chem Sci 2022),
+  # solubiltiies.pdf (Lu et al., glycine oligopeptides)
 
 # What to extract ----------------------------------------------------------
 task: >
@@ -74,6 +90,32 @@ coverage:
 repair:
   enabled: true
   max_attempts: 1
+
+# Review agent (LangGraph): works on problems still flagged after extraction and repair.
+# Each trigger turns matching flags into tasks; group_by: file (one task per file) or location (per passage/table).
+agent:
+  enabled: false                    # or run with --agent
+  model: openai/gpt-6.1-sol
+  max_steps_per_task: 6             # tool calls per task
+  max_calls: 120                    # model calls for the whole agent stage
+  max_tasks: 40
+  max_records_per_task: 30
+  max_output_tokens: 4000           # includes reasoning tokens for reasoning models
+  cache_dir: .cache/agent
+  triggers:                         # matched against review_reason and data_caveats, in this order
+    - {match: "table only", group_by: location}
+    - {match: "sequence not", group_by: file}
+    - {match: "passage contains a peptide sequence", group_by: location}
+    - {match: "C-terminal amidation", group_by: file}
+    - {match: "unit", group_by: file}
+    - {match: "solvent is a mixture", group_by: location}
+    - {match: "evidence quote not found", group_by: location}
+    - {match: "low model confidence", group_by: location}
+  hints:                            # extra guidance per problem (repair rules from the domain module are used otherwise)
+    "table only": "Some cells of this table have no record. Call re_extract on the table's chunk and name the missing rows and columns in the instruction."
+    "sequence not": "Use find_sequence with each peptide's label. Copy the sequence exactly as written, and quote the table row or sentence."
+    "unit": "Look for the unit in the table caption, column headers, footnotes (read_nearby) and the Methods (read_section). If the documents never state it, accept without changing anything."
+    "C-terminal amidation": "Check the Methods (read_section('methods', 'amide')) for which peptides were made as C-terminal amides. Change only peptides the text covers."
 
 # Budget and output ----------------------------------------------------------
 llm:

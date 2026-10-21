@@ -13,7 +13,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-SUPPORTED = {".pdf", ".xlsx", ".docx"}
+SUPPORTED = {".pdf", ".xlsx", ".docx"}       # file types scanned in local folders (.xml: Europe PMC full text)
+PARSER_VERSION = "2"                         # bump when parsing changes, so the paper store re-reads files
+SI_NAME_RE = re.compile(r"(_si_|_si\.|suppl|_esm|mmc\d|supporting|supplementary)", re.I)
+SECTION_RE = re.compile(
+    r"^\s*(?:\d{1,2}(?:\.\d{1,2})*\.?\s+)?(abstract|introduction|background|results and discussion|results|"
+    r"discussion|conclusions?|summary|materials and methods|methods and materials|methods|experimental section|"
+    r"experimental procedures|experimental|materials|acknowledg(?:e)?ments?|references|notes and references|"
+    r"supporting information|supplementary (?:information|materials?|methods))\s*$", re.I | re.M)
 CAPTION_RE = re.compile(r"^\s*\[?(captions on this page: )?(Table|TABLE)\s+S?-?[0-9IVX]+", re.M)
 DOI_RE = re.compile(r"\b(10\.\d{4,9}/[^\s\"<>,;]+)", re.I)
 
@@ -26,6 +33,9 @@ class Chunk:
     label: str           # human-readable location, e.g. "p4 text 2", "sheet Table S2"
     text: str
     score: int = 0
+    section: str = ""            # e.g. "Methods"; set by section labelling or the source's own structure
+    chunk_id: int | None = None  # set by the paper store
+    paper_id: str = ""           # set by the paper store
 
 
 @dataclass
@@ -52,6 +62,11 @@ def parse_document(path, chunk_chars: int = 2500, table_rows: int | None = None)
     path = Path(path)
     doc = Document(doc_id=hashlib.sha1(path.read_bytes()).hexdigest()[:10], path=path)
     suffix = path.suffix.lower()
+    if suffix == ".xml":
+        from .jats import read_jats
+        read_jats(doc, chunk_chars, _split, _split_table)
+        _context_for_uncaptioned_tables(doc)
+        return doc
     if suffix == ".pdf":
         _read_pdf(doc, chunk_chars)
     elif suffix == ".xlsx":
@@ -67,7 +82,50 @@ def parse_document(path, chunk_chars: int = 2500, table_rows: int | None = None)
     if not doc.title:
         doc.title = path.stem
     _context_for_uncaptioned_tables(doc)
+    label_sections(doc)
     return doc
+
+
+def label_sections(doc: Document) -> None:
+    """Give every chunk the section heading it falls under (Abstract, Results, Methods, ...).
+
+    Headings are lines that consist only of a standard section name. A chunk that contains a
+    heading is labelled with all sections it spans, e.g. "Results; Methods". Tables take the
+    section of the text on their page. SI files without headings are labelled "Supporting information".
+    """
+    is_si = bool(SI_NAME_RE.search(doc.path.name))
+    current = "Supporting information" if is_si else "Front matter"
+    page_section = {}
+    for c in doc.chunks:
+        if c.kind != "text" or c.section:
+            continue
+        spans = [current]
+        for m in SECTION_RE.finditer(c.text):
+            current = _section_name(m.group(1))
+            spans.append(current)
+        c.section = "; ".join(dict.fromkeys(spans))
+        if c.page is not None:
+            page_section.setdefault(c.page, spans[0])
+    for c in doc.chunks:
+        if not c.section:
+            c.section = page_section.get(c.page, "Supporting information" if is_si else "")
+
+
+def _section_name(s: str) -> str:
+    s = s.strip().lower()
+    if "method" in s or s.startswith("experimental") or s == "materials":
+        return "Methods"
+    if s.startswith("result") or s == "discussion":
+        return "Results and discussion" if "discussion" in s else "Results"
+    if s.startswith("conclusion") or s == "summary":
+        return "Conclusions"
+    if "reference" in s:
+        return "References"
+    if s.startswith("acknowledg"):
+        return "Acknowledgements"
+    if s.startswith("support") or s.startswith("supplementary"):
+        return "Supporting information"
+    return s.capitalize()
 
 
 def _context_for_uncaptioned_tables(doc: Document) -> None:
@@ -159,32 +217,72 @@ def _split_rows(text: str, max_chars: int, max_rows: int) -> list:
 def _read_pdf(doc: Document, chunk_chars: int) -> None:
     import fitz  # PyMuPDF
 
+    tables = _pdf_tables(doc.path)            # {page: [(bbox, rows)]}, only tables with real content
     pdf = fitz.open(doc.path)
     doc.title = ((pdf.metadata or {}).get("title") or "").strip()
     captions = {}
     for i, page in enumerate(pdf, start=1):
-        text = _clean(page.get_text("text"))
-        captions[i] = " / ".join(m.group(0) for m in re.finditer(r"^\s*(Table|TABLE)\s+S?-?[0-9IVX]+.{0,200}", text, re.M))
+        full = _clean(page.get_text("text"))
+        captions[i] = " / ".join(m.group(0) for m in re.finditer(r"^\s*(Table|TABLE)\s+S?-?[0-9IVX]+.{0,200}", full, re.M))
+        boxes = [b for b, _ in tables.get(i, [])]
+        # Read the page block by block and leave out blocks inside a table area: the table is
+        # sent once, as a table chunk, instead of twice (as page text and as a table).
+        blocks = [b for b in page.get_text("blocks") if b[6] == 0 and not _inside(b[:4], boxes)]
+        text = _clean("\n".join(b[4].strip() for b in blocks)) if boxes else full
         for j, piece in enumerate(_split(text, chunk_chars), start=1):
             doc.chunks.append(Chunk(doc.path.name, i, "text", f"p{i} text {j}", piece))
     pdf.close()
 
+    for i, page_tables in sorted(tables.items()):
+        for j, (_, rows) in enumerate(page_tables, start=1):
+            for k, piece in enumerate(_split_table(_rows_to_text(rows), chunk_chars), start=1):
+                if piece:
+                    label = f"p{i} table {j}" + (f" part {k}" if k > 1 else "")
+                    body = f"[captions on this page: {captions[i]}]\n{piece}" if captions.get(i) else piece
+                    doc.chunks.append(Chunk(doc.path.name, i, "table", label, body))
+
+
+def _pdf_tables(path) -> dict:
+    """Tables found by pdfplumber, keeping only those with real content (not chemical structures).
+
+    A table counts if it has at least two non-empty rows, at least a quarter of its words are
+    numbers (chemical structures misread as tables are mostly atom labels such as 'NH3+ O S'),
+    and it covers less than 70% of the page (larger 'tables' are page layouts misread as tables).
+    """
     try:
         import pdfplumber
     except ImportError:
         print("  [warn] pdfplumber not installed; PDF tables will be read as plain text only")
-        return
+        return {}
+    found = {}
     try:
-        with pdfplumber.open(doc.path) as pl:
+        with pdfplumber.open(path) as pl:
             for i, page in enumerate(pl.pages, start=1):
-                for j, table in enumerate(page.extract_tables() or [], start=1):
-                    for k, piece in enumerate(_split_table(_rows_to_text(table), chunk_chars), start=1):
-                        if piece:
-                            label = f"p{i} table {j}" + (f" part {k}" if k > 1 else "")
-                            body = f"[captions on this page: {captions[i]}]\n{piece}" if captions.get(i) else piece
-                            doc.chunks.append(Chunk(doc.path.name, i, "table", label, body))
+                area = float(page.width * page.height) or 1.0
+                for t in page.find_tables():
+                    rows = t.extract() or []
+                    filled = [r for r in rows if any(c and str(c).strip() for c in r)]
+                    words = [w for r in filled for c in r if c for w in str(c).split()]
+                    numeric = sum(1 for w in words if re.fullmatch(r"[<>~±]?[-−+]?\d+([.,]\d+)?(%|[eE][-−]?\d+)?", w))
+                    x0, top, x1, bottom = t.bbox
+                    if (len(filled) >= 2 and words and numeric / len(words) >= 0.25
+                            and (x1 - x0) * (bottom - top) / area < 0.7):
+                        found.setdefault(i, []).append((t.bbox, rows))
     except Exception as exc:
-        print(f"  [warn] table extraction failed for {doc.path.name}: {exc}")
+        print(f"  [warn] table extraction failed for {Path(path).name}: {exc}")
+    return found
+
+
+def _inside(block, boxes, min_overlap: float = 0.5) -> bool:
+    """True if at least min_overlap of the text block's area lies inside one of the table boxes."""
+    x0, y0, x1, y1 = block
+    a = max((x1 - x0) * (y1 - y0), 1e-6)
+    for bx0, by0, bx1, by1 in boxes:
+        w = min(x1, bx1) - max(x0, bx0)
+        h = min(y1, by1) - max(y0, by0)
+        if w > 0 and h > 0 and w * h / a >= min_overlap:
+            return True
+    return False
 
 
 def _read_xlsx(doc: Document, chunk_chars: int) -> None:

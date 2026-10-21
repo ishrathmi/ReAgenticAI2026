@@ -38,8 +38,17 @@ from litagent.tools.extract import coerce  # noqa: E402
 
 # Categorical palette, fixed order (validated: CVD and normal-vision separation pass for 4 slots).
 # Slots 3-4 are below 3:1 contrast on white, so every bar carries a visible value label.
-PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
-INK, INK_2, GRID = "#0b0b0b", "#52514e", "#e6e5e0"
+# Colours: the project palette only (Coolors). Background is plain white.
+#   Bright Marine #296eb4, Copperwood #b1740f, Deep Twilight #1b065e, Sunflower Gold #fdb833, Muted Teal #8db38b
+# Series order checked with the dataviz validator: every pair separates clearly for normal and colour-blind
+# vision (worst pair Muted Teal / Sunflower Gold, delta-E 11.9 protan, 17.4 normal). Deep Twilight and Sunflower
+# Gold sit outside the usual lightness band, and Sunflower Gold (1.7:1) and Muted Teal (2.3:1) are faint on white,
+# so every bar carries a value label and a thin Deep Twilight outline. A 6th+ model reuses the colours as
+# hatched bars instead of introducing new colours.
+MARINE, COPPER, TWILIGHT, GOLD, TEAL = "#296eb4", "#b1740f", "#1b065e", "#fdb833", "#8db38b"
+PALETTE = [MARINE, COPPER, TWILIGHT, GOLD, TEAL]
+INK = INK_2 = TWILIGHT
+GRID = None                                    # no gridlines: value labels carry the numbers
 KEEP = ["source_file", "location", "page", "doi", "paper_title", "source", "evidence_verified",
         "evidence_match", "sequence_source", "model", "paper_mentions_c_amide", "repair_outcome",
         "passage_has_sequence", "passage_has_cosolvent_percent"]
@@ -55,7 +64,8 @@ def load_runs(out_dir: Path, basename: str) -> dict:
             rows = list(csv.DictReader(f))
         if not rows:
             continue
-        model = rows[0].get("model") or path.stem.replace(basename, "").strip("_") or "unknown"
+        # run_label separates "model (pipeline)" from "model + agent ..." in runs that used the review agent
+        model = rows[0].get("run_label") or rows[0].get("model") or path.stem.replace(basename, "").strip("_") or "unknown"
         found[model] = {"path": path, "rows": rows}
     return found
 
@@ -78,17 +88,14 @@ def rescore(rows: list, schema: dict, enrich) -> list:
     return out
 
 
-def run_stats(out_dir: Path) -> dict:
-    """Latest runs.csv row per model, plus mean table coverage from that run's event log."""
+def run_stats(out_dir: Path) -> list:
+    """All completed runs from runs.csv (oldest first), each with its mean table coverage from the event log."""
     table = out_dir / "runs" / "runs.csv"
-    stats = {}
     if not table.exists():
-        return stats
+        return []
     with open(table, encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            if row.get("status", "").startswith("ok") or row.get("status", "").startswith("stopped"):
-                stats[row["model"]] = row
-    for model, row in stats.items():
+        rows = [r for r in csv.DictReader(f) if r.get("status", "").startswith(("ok", "stopped"))]
+    for row in rows:
         log = out_dir / "runs" / f"{row['run_id']}.jsonl"
         covs = []
         if log.exists():
@@ -97,7 +104,57 @@ def run_stats(out_dir: Path) -> dict:
                 if e.get("event") == "table_coverage":
                     covs.append(e["coverage"])
         row["mean_table_coverage"] = sum(covs) / len(covs) if covs else None
-    return stats
+    return rows
+
+
+def run_for_file(path: Path, model: str, rows: list, runs: list) -> dict:
+    """The run behind an output file, for cost and time.
+
+    1. The run_id written into the file (outputs from 21 Oct 2026 on); otherwise the run of the same
+       extraction model that finished closest to the file's save time.
+    2. If that run mostly reused saved replies (cache hits > model calls), its cost says little about the
+       model, so the latest earlier run of the same model with mostly fresh calls is used instead.
+       stats_note records which run was used.
+    """
+    from datetime import datetime
+    same = [r for r in runs if r.get("model") == model]
+    rid = next((r.get("run_id") for r in rows if r.get("run_id")), None)
+    chosen = next((r for r in same if r["run_id"] == rid), None)
+    if chosen is None:
+        saved = datetime.fromtimestamp(path.stat().st_mtime)
+        gaps = []
+        for r in same:
+            try:
+                gaps.append((abs((saved - datetime.fromisoformat(r["finished"])).total_seconds()), r))
+            except (KeyError, ValueError):
+                pass
+        chosen = min(gaps, key=lambda g: g[0])[1] if gaps else None
+    if chosen is None:
+        return {}
+    note = f"run {chosen['run_id']}"
+    if float(chosen.get("cache_hits") or 0) > float(chosen.get("llm_calls") or 0):
+        fresh = [r for r in same if r["run_id"] <= chosen["run_id"]
+                 and float(r.get("cache_hits") or 0) <= float(r.get("llm_calls") or 0)
+                 and bool(r.get("agent_model")) == bool(chosen.get("agent_model"))]
+        if fresh:
+            note = f"run {fresh[-1]['run_id']} (run {chosen['run_id']} that wrote the file mostly reused saved replies)"
+            chosen = fresh[-1]
+    return {**chosen, "stats_note": note}
+
+
+def label_stats(label: str, row: dict) -> dict:
+    """Run statistics for one output label. For 'model (pipeline)' the agent's share is subtracted,
+    so pipeline-only and pipeline + agent are compared on cost and time as well as accuracy."""
+    row = dict(row)
+    if not row or not label.endswith("(pipeline)"):
+        return row
+    for total, part in (("cost_usd", "agent_cost_usd"), ("wall_time_s", "agent_inference_s"),
+                        ("inference_time_s", "agent_inference_s"), ("llm_calls", "agent_calls")):
+        try:
+            row[total] = float(row.get(total) or 0) - float(row.get(part) or 0)
+        except ValueError:
+            pass
+    return row
 
 
 # --- record identity ------------------------------------------------------------------------
@@ -308,10 +365,11 @@ def _style(ax, title, ylabel=None, ymax=None):
     ax.set_title(title, loc="left", fontsize=11, color=INK, fontweight="bold", pad=10)
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
-    ax.spines["bottom"].set_color(GRID)
+    ax.spines["bottom"].set_color(TWILIGHT)
+    ax.spines["bottom"].set_linewidth(0.8)
     ax.tick_params(colors=INK_2, labelsize=9, length=0)
-    ax.yaxis.grid(True, color=GRID, linewidth=0.8)
-    ax.set_axisbelow(True)
+    ax.grid(False)
+    ax.set_yticks([])                          # values are labelled on the bars
     if ylabel:
         ax.set_ylabel(ylabel, color=INK_2, fontsize=9)
     if ymax is not None:
@@ -328,8 +386,7 @@ def grouped_bars(ax, groups: list, models: list, values: dict, fmt="{:.0f}", yma
         ys = [values[m].get(g) for g in groups]
         ys_plot = [y if y is not None else 0 for y in ys]
         top = max(top, max(ys_plot or [0]))
-        bars = ax.bar(x - 0.4 + width * (i + 0.5), ys_plot, width * 0.92, color=PALETTE[i % len(PALETTE)],
-                      label=short(m), edgecolor="white", linewidth=1)
+        bars = ax.bar(x - 0.4 + width * (i + 0.5), ys_plot, width * 0.88, label=short(m), **series_style(i))
         for b, y in zip(bars, ys):
             ax.text(b.get_x() + b.get_width() / 2, b.get_height(), "n/a" if y is None else fmt.format(y),
                     ha="center", va="bottom", fontsize=7.5, color=INK_2)
@@ -341,26 +398,66 @@ def grouped_bars(ax, groups: list, models: list, values: dict, fmt="{:.0f}", yma
         ax.set_ylim(0, ymax)
 
 
+def series_style(i: int) -> dict:
+    """Bar style for model i: solid palette colour with a Deep Twilight outline; from the 5th model on,
+    the same colours as hatching on the background (no new colours)."""
+    col = PALETTE[i % len(PALETTE)]
+    if i < len(PALETTE):
+        return {"facecolor": col, "edgecolor": TWILIGHT, "linewidth": 0.6}
+    return {"facecolor": "none", "edgecolor": col, "linewidth": 1.0, "hatch": "////"}
+
+
+def text_on(fill: str) -> str:
+    """Label colour for text drawn on a filled bar: the palette colour with the higher contrast."""
+    return GOLD if fill == TWILIGHT else TWILIGHT     # Gold on Twilight 9.8:1; Twilight on Marine 3.2, Copper 4.4, Gold 9.8, Teal 7.3
+
+
 def textwrap(s: str, width: int = 16) -> str:
     import textwrap as tw
     return "\n".join(tw.wrap(s, width))
 
 
-def short(model: str) -> str:
-    return model.split("/")[-1]
+def short(label: str) -> str:
+    """'openai/gpt-4o-mini + agent openai/gpt-6.1-sol' -> 'gpt-4o-mini + agent gpt-6.1-sol'."""
+    return re.sub(r"[\w.-]+/", "", label)
+
+
+def extraction_model(label: str, rows: list) -> str:
+    """Extraction model of an output: the part of the label before ' + agent' / ' (pipeline)'."""
+    base = re.split(r" \+ agent | \(pipeline\)", label)[0].strip()
+    return base or next((r.get("model") for r in rows if r.get("model")), label)
 
 
 def legend(fig_or_ax, models):
     from matplotlib.patches import Patch
-    handles = [Patch(color=PALETTE[i % len(PALETTE)], label=short(m)) for i, m in enumerate(models)]
+    handles = [Patch(label=short(m), **series_style(i)) for i, m in enumerate(models)]
     fig_or_ax.legend(handles=handles, frameon=False, fontsize=9, loc="upper right", ncol=len(models))
+
+
+def snap_to_palette(path: Path) -> None:
+    """Map every pixel to the nearest palette colour (or the white background), without dithering.
+
+    matplotlib smooths text and edges with blended colours; snapping removes them, so the image contains
+    only the project palette. Charts are saved at high resolution, so text stays sharp after snapping.
+    """
+    from PIL import Image
+    colours = [MARINE, COPPER, TWILIGHT, GOLD, TEAL, "#ffffff"]
+    pal = []
+    for h in colours:
+        pal += [int(h[k:k + 2], 16) for k in (1, 3, 5)]
+    pal_img = Image.new("P", (1, 1))
+    pal_img.putpalette(pal + pal[-3:] * (256 - len(colours)))
+    img = Image.open(path).convert("RGB").quantize(palette=pal_img, dither=Image.Dither.NONE)
+    img.convert("RGB").save(path, optimize=True)
 
 
 def plot_all(out: Path, models, auto, agree, stats, gold_ok, scores, fields, n_gold, n_draft):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    plt.rcParams.update({"font.family": "DejaVu Sans", "figure.facecolor": "white", "axes.facecolor": "white"})
+    plt.rcParams.update({"font.family": "DejaVu Sans", "figure.facecolor": "white", "axes.facecolor": "white",
+                         "text.color": TWILIGHT, "axes.labelcolor": TWILIGHT, "xtick.color": TWILIGHT,
+                         "ytick.color": TWILIGHT, "axes.edgecolor": TWILIGHT, "hatch.linewidth": 1.0})
 
     def accuracy(ax):
         if not gold_ok:
@@ -394,27 +491,40 @@ def plot_all(out: Path, models, auto, agree, stats, gold_ok, scores, fields, n_g
         _style(ax, "Automatic checks (no reference set needed)", "% of records")
 
     def agree_chart(ax):
-        cats = ["found by all models", "found by some other models", "found by this model only"]
-        shades = ["#52514e", "#a3a29c", "#dedcd5"]          # neutral ramp: model colours keep their meaning
+        """Each row keeps its model's colour; the fill shows agreement:
+        solid = found by all models, hatched = found by some, outline only = this model only."""
+        from matplotlib.patches import Patch
         import numpy as np
+        cats = ["found by all models", "found by some other models", "found by this model only"]
         y = np.arange(len(models))
-        left = np.zeros(len(models))
-        for c, col in zip(cats, shades):
-            vals = np.array([agree[m][c] for m in models], dtype=float)
-            ax.barh(y, vals, left=left, color=col, edgecolor="white", linewidth=2, label=c, height=0.6)
-            for yi, (l, v) in enumerate(zip(left, vals)):
-                if v:
-                    ax.text(l + v / 2, yi, f"{int(v)}", ha="center", va="center", fontsize=8,
-                            color="white" if col == shades[0] else INK)
-            left += vals
+        gap = 0.6                                       # records-width gap between segments
+        for yi, m in enumerate(models):
+            col = PALETTE[yi % len(PALETTE)]
+            left = 0.0
+            for c in cats:
+                v = float(agree[m][c])
+                if not v:
+                    continue
+                style = ({"facecolor": col, "edgecolor": TWILIGHT, "linewidth": 0.6} if c == cats[0] else
+                         {"facecolor": "none", "edgecolor": col, "linewidth": 1.2, "hatch": "////"} if c == cats[1] else
+                         {"facecolor": "none", "edgecolor": col, "linewidth": 1.6})
+                ax.barh(yi, v, left=left, height=0.6, **style)
+                label_kw = {"color": text_on(col) if c == cats[0] else TWILIGHT}
+                if c == cats[1]:                        # keep the number readable over the hatching
+                    label_kw["bbox"] = {"boxstyle": "round,pad=0.15", "facecolor": "white", "edgecolor": "none"}
+                ax.text(left + v / 2, yi, f"{int(v)}", ha="center", va="center", fontsize=8, fontweight="bold", **label_kw)
+                left += v + gap
         ax.set_yticks(y)
         ax.set_yticklabels([short(m) for m in models])
         ax.invert_yaxis()
         _style(ax, "Agreement between models (distinct records)")
-        ax.yaxis.grid(False)
-        ax.xaxis.grid(True, color=GRID)
+        ax.set_yticks(y)
+        ax.set_yticklabels([textwrap(short(m), 22) for m in models], fontsize=8.5)
         ax.set_xlabel("records", color=INK_2, fontsize=9)
-        ax.legend(frameon=False, fontsize=8, loc="lower center", bbox_to_anchor=(0.5, -0.42), ncol=3)
+        handles = [Patch(facecolor=TWILIGHT, edgecolor=TWILIGHT, label=cats[0]),
+                   Patch(facecolor="none", edgecolor=TWILIGHT, hatch="////", label=cats[1]),
+                   Patch(facecolor="none", edgecolor=TWILIGHT, linewidth=1.6, label=cats[2])]
+        ax.legend(handles=handles, frameon=False, fontsize=8, loc="lower center", bbox_to_anchor=(0.5, -0.42), ncol=3)
 
     def cost_time(ax_cost, ax_time):
         cost = {m: {"cost": _num(stats.get(m, {}).get("cost_usd"))} for m in models}
@@ -434,20 +544,23 @@ def plot_all(out: Path, models, auto, agree, stats, gold_ok, scores, fields, n_g
         if name != "agreement":
             legend(ax, models)
         fig.tight_layout()
-        fig.savefig(out / f"{name}.png", dpi=160)
+        fig.savefig(out / f"{name}.png", dpi=240)
+        snap_to_palette(out / f"{name}.png")
         plt.close(fig)
     if gold_ok:
         fig, ax = plt.subplots(figsize=(9, 4.5))
         fields_chart(ax)
         legend(ax, models)
         fig.tight_layout()
-        fig.savefig(out / "field_accuracy.png", dpi=160)
+        fig.savefig(out / "field_accuracy.png", dpi=240)
+        snap_to_palette(out / "field_accuracy.png")
         plt.close(fig)
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(8, 3.6))
     cost_time(a1, a2)
     legend(fig, models)
     fig.tight_layout(rect=(0, 0, 1, 0.9))
-    fig.savefig(out / "cost_time.png", dpi=160)
+    fig.savefig(out / "cost_time.png", dpi=240)
+    snap_to_palette(out / "cost_time.png")
     plt.close(fig)
 
     # one-page summary
@@ -464,7 +577,8 @@ def plot_all(out: Path, models, auto, agree, stats, gold_ok, scores, fields, n_g
     legend(fig, models)
     fig.suptitle("Peptide solubility extraction: model comparison", x=0.01, ha="left", fontsize=14,
                  fontweight="bold", color=INK)
-    fig.savefig(out / "summary.png", dpi=150, bbox_inches="tight")
+    fig.savefig(out / "summary.png", dpi=200, bbox_inches="tight")
+    snap_to_palette(out / "summary.png")
     plt.close(fig)
 
 
@@ -489,7 +603,9 @@ def main(argv=None) -> int:
     enrich = domains.load(cfg.get("domain"))
     models = sorted(runs)
     per_model = {m: rescore(runs[m]["rows"], schema, enrich) for m in models}
-    stats = run_stats(out_dir)
+    all_runs = run_stats(out_dir)
+    stats = {m: label_stats(m, run_for_file(runs[m]["path"], extraction_model(m, runs[m]["rows"]), runs[m]["rows"], all_runs))
+             for m in models}
     auto = {m: automatic(per_model[m]) for m in models}
     agree = agreement(per_model)
 
@@ -549,7 +665,7 @@ def write_workbook(path, models, auto, agree, stats, scores, fields, details, di
         rows.append([f"field: {k} %"] + [fields[m].get(k) for m in models])
     for c in ["found by all models", "found by some other models", "found by this model only"]:
         rows.append([c] + [agree[m][c] for m in models])
-    for k in ["cost_usd", "wall_time_s", "inference_time_s", "llm_calls", "tokens_in", "tokens_out",
+    for k in ["stats_note", "cost_usd", "wall_time_s", "inference_time_s", "llm_calls", "tokens_in", "tokens_out",
               "mean_latency_s", "mean_table_coverage"]:
         rows.append([k] + [stats.get(m, {}).get(k) for m in models])
     ws.append(["metric"] + models)

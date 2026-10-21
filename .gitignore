@@ -34,3 +34,6 @@ data/papers/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Streamlit secrets (the theme in .streamlit/config.toml is shared)
+.streamlit/secrets.toml

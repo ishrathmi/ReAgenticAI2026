@@ -12,10 +12,11 @@ from openpyxl.utils import get_column_letter
 
 AGENT_COLUMNS = ["evidence_verified", "evidence_match", "unit_in_source", "needs_review", "review_reason",
                  "data_caveats", "repair_attempted", "repair_outcome", "repaired_fields", "repair_note",
-                 "model", "extracted_at"]
+                 "agent_status", "agent_changes", "agent_trace", "agent_reject_reason",
+                 "run_label", "run_id", "model", "extracted_at"]
 WIDE = {"evidence": 60, "paper_title": 40, "title": 50, "notes": 40, "sequence": 28,
         "modifications": 25, "solvent": 22, "buffer": 22, "method": 24, "review_reason": 36, "data_caveats": 30,
-        "meaning": 90, "source_file": 30}
+        "meaning": 90, "source_file": 30, "agent_trace": 60, "agent_changes": 50, "trace": 80, "summary": 50}
 
 
 def columns(schema: dict, records: list) -> list:
@@ -26,7 +27,11 @@ def columns(schema: dict, records: list) -> list:
     return cols
 
 
-def write(records: list, files: list, schema: dict, out_dir: str, basename: str) -> tuple:
+def write(records: list, files: list, schema: dict, out_dir: str, basename: str, extra_sheets: dict | None = None) -> tuple:
+    """CSV of the records, plus an Excel workbook (Records, Files processed, Field guide, extra sheets).
+
+    extra_sheets: {sheet name: list of row dicts}, e.g. the review agent's tasks and rejected records.
+    """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     cols = columns(schema, records)
@@ -53,7 +58,15 @@ def write(records: list, files: list, schema: dict, out_dir: str, basename: str)
         {"column": "repair_outcome", "meaning": "accepted: a targeted retry fixed a flagged problem and passed the same checks (repaired_fields shows old -> new). rejected / no change: the original record was kept."},
         {"column": "data_caveats", "meaning": "Gaps in the source itself (for example, no unit stated). Not an extraction error; does not set needs_review."},
     ]
+    guide += [
+        {"column": "agent_status", "meaning": "Review agent: changed / reviewed, unchanged / added by agent. Rejected records are on the 'Rejected by agent' sheet."},
+        {"column": "agent_changes", "meaning": "Every field the agent changed: old -> new, with the chunk and quote that support it."},
+        {"column": "agent_trace", "meaning": "The tools the agent called for this record's task(s), in order, and its closing reason."},
+    ]
     _sheet(wb.create_sheet("Field guide"), ["column", "meaning"], guide)
+    for name, rows in (extra_sheets or {}).items():
+        if rows:
+            _sheet(wb.create_sheet(name[:31]), list(dict.fromkeys(k for r in rows for k in r)), rows)
     xlsx_path = out / f"{basename}.xlsx"
     wb.save(xlsx_path)
     return csv_path, xlsx_path

@@ -1,0 +1,38 @@
+# Web app theme: Coolors palette
+#   Copperwood #b1740f · Muted Teal #8db38b · Sunflower Gold #fdb833 · Bright Marine #296eb4 · Deep Twilight #1b065e
+# Roles were chosen for contrast (WCAG AA): Deep Twilight text on light surfaces (15-17:1), white on Bright Marine
+# buttons (5.3:1), Sunflower Gold controls on the Deep Twilight sidebar (9.8:1). Copperwood is used for headings
+# only (3.9:1 on white is enough for large text, not for body text). Light surfaces are tints of the palette
+# colours (Muted Teal #eef4ee and #cfe0ce, Sunflower Gold #fff1d2); dark text steps are darker shades
+# (Copperwood #6e4709, Muted Teal #3d5c3b) and the sidebar panel shade is a lighter Deep Twilight (#2d1878).
+
+[theme]
+base = "light"
+primaryColor = "#296eb4"              # Bright Marine: buttons, selected tab, progress bar, checkboxes
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#eef4ee"  # Muted Teal tint: inputs, panels
+textColor = "#1b065e"                 # Deep Twilight
+linkColor = "#296eb4"
+borderColor = "#cfe0ce"
+dataframeHeaderBackgroundColor = "#eef4ee"
+dataframeHeaderTextColor = "#1b065e"
+blueColor = "#296eb4"
+orangeColor = "#b1740f"
+violetColor = "#1b065e"
+yellowColor = "#fdb833"               # warnings (flagged records)
+yellowBackgroundColor = "#fff1d2"
+yellowTextColor = "#6e4709"           # dark Copperwood, 7.3:1 on the warning background
+codeTextColor = "#6e4709"                # dark Copperwood, 7.3:1 on the code background
+codeBackgroundColor = "#eef4ee"
+greenColor = "#8db38b"                 # Muted Teal: success messages
+greenBackgroundColor = "#eef4ee"
+greenTextColor = "#3d5c3b"             # dark Muted Teal, 6.8:1 on its background
+chartCategoricalColors = ["#296eb4", "#b1740f", "#1b065e", "#fdb833", "#8db38b"]
+baseRadius = "0.5rem"
+
+[theme.sidebar]
+backgroundColor = "#1b065e"           # Deep Twilight
+secondaryBackgroundColor = "#2d1878"  # inputs in the sidebar
+textColor = "#ffffff"
+primaryColor = "#fdb833"              # Sunflower Gold toggles and selections
+borderColor = "#3d2a8a"

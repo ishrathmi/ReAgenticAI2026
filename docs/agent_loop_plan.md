@@ -1,4 +1,8 @@
-# Agent loop: failure types and planned tools
+# Agent loop: failure types and tools
+
+**Status (21 Oct 2026):** built as a LangGraph loop in `src/litagent/review_agent.py`. Tools: search_paper,
+read_section, read_nearby, find_sequence, re_extract, update_record, reject, accept. Failure types 1-6 below
+are handled through `agent.triggers` in the profile; 7 (values in figures) and 8 (search_more) are not built yet.
 
 The pipeline (`src/litagent/agent.py`) runs a fixed first pass. The agent loop will then take each
 flagged record or incomplete table and let the model choose the next action from a small tool set,
