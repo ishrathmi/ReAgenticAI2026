@@ -27,6 +27,7 @@ What the agent extracts and how it decides. Rules are numbered so that code, pro
 - **P3d.** Notation conventions:
   - **Polymers** (homopolymers and alternating copolymers) are written as one repeat unit with `*` end markers, e.g. P3HT `*c1sc(*)c(CCCCCC)c1`. Side chains are written in full.
   - **Ambiguous regiochemistry** (isomer mixtures, substituents at unspecified positions) uses CXSMILES, e.g. multicentre attachment `|m:…|`.
+  - **Isomer mixtures CXSMILES can't express** (e.g. fullerene bis-adducts, where each addend is fused to the cage by two bonds): give one representative isomer and say in the comment that the compound is a mixture of isomers and which one is shown.
 - **P3e.** Formula check (small molecules only, not polymers): if the paper reports a molecular formula, HRMS/MALDI mass or elemental analysis, compare it with the formula and mass RDKit calculates from the SMILES (allowing for adducts such as [M+H]⁺). If they disagree, mark the compound for human review.
 
 **P4.** If the compound is named other than by a number (e.g. *1*, *1c*), report the name. It may be a full structural name (e.g. "Poly(3-hexylthiophene-2,5-diyl)"), a descriptive name (e.g. "Fullerene") or an abbreviation (e.g. "P(NDI2OD-T2)", "Y6", "PBQx-TF").

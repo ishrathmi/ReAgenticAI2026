@@ -127,6 +127,13 @@ def test_lookup_disagreement_range_and_w2b_conflicts_go_to_review(monkeypatch):
     assert any(i.startswith("W2b: 'Spiro-OMeTAD'") for i in issues)
 
 
+def test_representative_isomer_note_goes_to_comment():
+    c = compound(structure_note="mixture of regioisomers; trans-3 isomer shown")
+    [(rows, issues)] = extractor.to_compounds(answer(c), "10.1000/x")
+    assert issues == []
+    assert rows[0]["comment"].startswith("mixture of regioisomers; trans-3 isomer shown")
+
+
 def test_number_in_quote_handles_unicode_minus_and_trailing_zeros():
     assert extractor._number_in_quote(-5.2, "a HOMO of −5.20 eV")
     assert extractor._number_in_quote(5.4, "IP = 5.4 eV")

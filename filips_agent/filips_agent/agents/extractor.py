@@ -102,7 +102,9 @@ label_in_paper: its number or label (e.g. "1c"), or null.
   - smiles: your SMILES for the full structure, side chains included; for polymers the repeat \
 unit with * end markers; CXSMILES (e.g. |m:...|) only for ambiguous regiochemistry (P3, P3d). \
 structure_source: where the structure came from. structure_confident: false if anything about \
-the structure is unclear (P3c); structure_note: what is unclear.
+the structure is unclear (P3c); structure_note: what is unclear. For an isomer mixture that \
+CXSMILES can't express (P3d), give a representative isomer, keep structure_confident true if \
+nothing else is unclear, and say in structure_note that it is a mixture and which isomer is shown.
   - reported_formula: the molecular formula the paper reports for it (characterisation, HRMS \
 "calcd for", elemental analysis), or null.
   - values: one entry per reported number, exactly as printed:
@@ -186,6 +188,8 @@ def to_compounds(result, doi, known=()):
         issues += lookup_issues
         if not c["structure_confident"]:
             issues.append(f"structure uncertain (P3c): {c['structure_note'] or 'no reason given'}")
+        elif c["structure_note"]:  # e.g. representative isomer of a mixture (P3d)
+            note = "; ".join(x for x in (c["structure_note"], note) if x)
         if smiles and formula_matches(smiles, c["reported_formula"]) is False:
             issues.append(f"reported formula {c['reported_formula']} does not match the structure (P3e)")
         raw_values = []
