@@ -3,9 +3,9 @@ import time
 
 import pytest
 
-from filips_agent import pipeline, web
-from filips_agent.ledger import AWAITING_PDF, Ledger
-from filips_agent.normalize_values import normalize_record
+from energy_extractor import pipeline, web
+from energy_extractor.ledger import AWAITING_PDF, Ledger
+from energy_extractor.normalize_values import normalize_record
 
 THIOPHENE = "CCCCCCc1ccsc1"
 

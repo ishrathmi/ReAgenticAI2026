@@ -1,7 +1,7 @@
 """Human review of flagged records (RULES.md W2a, W3): decisions typed into review.csv.
 
 Open data/output/review.csv (Excel is fine), fill in the decision column for any rows,
-save, and run `python -m filips_agent review`. `export`, `run` and `reprocess` apply
+save, and run `python -m energy_extractor review`. `export`, `run` and `reprocess` apply
 filled-in decisions too, before they rewrite the file.
 
     accept   the record is right, or right after your edits to its cells -> data table

@@ -2,8 +2,8 @@
 import pymupdf
 import pytest
 
-from filips_agent import figures
-from filips_agent.figures import Drawing
+from energy_extractor import figures
+from energy_extractor.figures import Drawing
 
 
 @pytest.fixture

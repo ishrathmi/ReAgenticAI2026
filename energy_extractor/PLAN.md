@@ -39,7 +39,7 @@ Because Claude reads PDFs directly (pages as text and images), the planned separ
 
 1. **Name → structure** *(built)*: OPSIN (rule-based IUPAC parser, web service) for systematic names.
 2. **Known compounds** *(built)*: PubChem PUG REST lookup by name or synonym (P3 well-known, e.g. P3HT, PC71BM, Y6, spiro-OMeTAD). The team's own dataset counts as a source once it grows.
-3. **Image → structure** *(built)*: a fallback for compounds sent to review for a structure reason (no structure, P3c, P3e, invalid SMILES, lookups disagree). It runs right after the paper is extracted, if the image tools are installed, and adds its result to the review reason; it never moves a record out of review. `python -m filips_agent images` redoes it by hand (`--refresh` reads the drawings again, `--all` checks every compound). On the gold set it only confirmed structures the other routes already had, and couldn't read the cases they missed (fullerene, figures drawing only fragments). Find the figure that shows the compound (caption, scheme final product, or the extractor's `structure_location`), single out its drawing by the label next to it, and read it with **DECIMER** and **MolScribe** (second opinion). The reading must fit the reported formula / OPSIN / PubChem before it counts; a drawing that doesn't is reported as "different compound?". Heavy ML dependencies (TensorFlow / PyTorch), so they're an optional install in separate environments. Labels inside raster figures rely on OCR, so small or rotated labels can be missed (then all drawings in the figure are listed as candidates).
+3. **Image → structure** *(built)*: a fallback for compounds sent to review for a structure reason (no structure, P3c, P3e, invalid SMILES, lookups disagree). It runs right after the paper is extracted, if the image tools are installed, and adds its result to the review reason; it never moves a record out of review. `python -m energy_extractor images` redoes it by hand (`--refresh` reads the drawings again, `--all` checks every compound). On the gold set it only confirmed structures the other routes already had, and couldn't read the cases they missed (fullerene, figures drawing only fragments). Find the figure that shows the compound (caption, scheme final product, or the extractor's `structure_location`), single out its drawing by the label next to it, and read it with **DECIMER** and **MolScribe** (second opinion). The reading must fit the reported formula / OPSIN / PubChem before it counts; a drawing that doesn't is reported as "different compound?". Heavy ML dependencies (TensorFlow / PyTorch), so they're an optional install in separate environments. Labels inside raster figures rely on OCR, so small or rotated labels can be missed (then all drawings in the figure are listed as candidates).
 4. **Vision LLM:** the structure resolver also reads the image directly.
 5. **Decide:** canonicalise all candidates with RDKit and compare them. *Built for routes 1–2:* comparison as RDKit canonical SMILES without stereo (E/Z and R/S are often drawn differently). Bond orders and charges must match, so unusual drawings such as PubChem's fullerenes (no double bonds) go to review. If the routes agree, accept. If they disagree, the resolver checks plausibility against the image, name and formula. Still unsure → review (P3c). Small molecules always get the formula check (P3e).
 
@@ -71,33 +71,36 @@ seed DOIs (LitVault digest, manual list)
 
 ## Paper access (W6)
 
-- **Saved extractions:** every raw answer is kept in `data/extractions/`; `python -m filips_agent reprocess` rebuilds the tables from them for free after the checks or conversions change.
+- **Saved extractions:** every raw answer is kept in `data/extractions/`; `python -m energy_extractor reprocess` rebuilds the tables from them for free after the checks or conversions change.
 - **Wish list + inbox (built first):** `data/wishlist.csv` lists what's wanted. Put PDFs in `data/inbox/` (any file name; the DOI is matched from the PDF's metadata or first page, or name it `<doi with / replaced by _>.pdf`). SI files go in the same folder with an `_SI` suffix. The next run picks them up.
 - **Browser helper (optional, later):** a Claude Code skill that works through the wish list with Claude in Chrome, using your own browser login to download PDFs into the inbox. It runs interactively in Claude Code, not inside the Python pipeline. Keep downloads modest and personal, in line with publisher terms.
 
 ## Folder layout
 
 ```
-filips_agent/
+energy_extractor/
   RULES.md  PLAN.md  requirements.txt
-  filips_agent/         Python package (python -m filips_agent …)
+  docs/                     workflow-overview.png, workflow-detailed.png
+  energy_extractor/         Python package (python -m energy_extractor …)
+    pipeline.py             the steps, shared by the command line and the page
     ledger.py fetch.py llm.py normalize_values.py structures.py resolve.py checks.py review.py
-    figures.py ocsr.py dois.py __main__.py
-    agents/   inbox_sorter.py triage.py extractor.py (schemas live next to each agent)
-  ocsr/                 image-tool workers + install notes (run in .venv-decimer / .venv-molscribe)
+    figures.py ocsr.py dois.py web.py __main__.py
+    agents/                 inbox_sorter.py triage.py extractor.py (schemas live next to each agent)
+    web/                    index.html, the browser page
+  ocsr/                     image-tool workers + install notes (run in .venv-decimer / .venv-molscribe)
   eval/
-    gold_labels.csv     hand-labelled reference data (tracked)
-    score.py            compares stored results with gold_labels.csv (python -m eval.score)
-    triage_trial.py     runs triage with several models side by side
+    gold_labels.csv         hand-labelled reference data (tracked)
+    score.py                compares stored results with gold_labels.csv (python -m eval.score)
+    triage_trial.py         runs triage with several models side by side
   tests/
-  data/                 gitignored: inbox/, cache/, ledger.db, output CSVs
-  .venv/                gitignored
+  data/                     gitignored: inbox/, pdfs/, cache/, ledger.db, extractions/, output CSVs, logs
+  .venv/                    gitignored
 ```
 
 ## Build order
 
 1. `normalize_values.py` + tests: settles the conversion rules. *(done)*
-2. `ledger.py` + `fetch.py` (OpenAlex) + wish list/inbox, with a small command line (`python -m filips_agent …`). *(done)*
+2. `ledger.py` + `fetch.py` (OpenAlex) + wish list/inbox, with a small command line (`python -m energy_extractor …`). *(done)*
 3. Inbox sorter, triage and extractor agents with schemas, scored against `eval/gold_labels.csv`. *(built; first gold-set run and triage trial in progress)*
 4. `structures.py` + `resolve.py` + `checks.py`: RDKit, formula check, OPSIN and PubChem cross-checks, range and W2a/W2b checks. *(done)* DECIMER/MolScribe image check *(built)*; human review route *(built)*.
 5. Figure reader, reference harvester, critic, review tables.

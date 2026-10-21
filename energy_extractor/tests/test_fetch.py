@@ -3,8 +3,8 @@ import json
 import pymupdf
 import pytest
 
-from filips_agent import fetch
-from filips_agent.ledger import AWAITING_PDF, TO_READ, Ledger
+from energy_extractor import fetch
+from energy_extractor.ledger import AWAITING_PDF, TO_READ, Ledger
 
 
 def raw_work(doi, wid, refs=(), abstract=None, pdf_url=None):
@@ -284,7 +284,7 @@ def test_si_dropped_without_its_paper_says_so_and_can_be_given_the_papers_doi(le
 
 
 def test_paper_dropped_again_is_left_with_its_status_or_read_again(ledger, inbox, openalex_titles, monkeypatch):
-    from filips_agent import pipeline
+    from energy_extractor import pipeline
     box, pdfs = inbox
     monkeypatch.setattr(fetch, "get_fulltext", lambda doi, pdf_dir=pdfs: {"main": pdfs / "x.pdf", "si": []}
                         if doi == "10.1000/new" else None)

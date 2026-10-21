@@ -1,4 +1,4 @@
-"""Browser page for the pipeline: `python -m filips_agent web`, then http://127.0.0.1:8000.
+"""Browser page for the pipeline: `python -m energy_extractor web`, then http://127.0.0.1:8000.
 
 It only listens on this computer. The page shows the ledger's tables, takes dropped files
 into data/inbox/, records review decisions, and runs pipeline steps as one background job

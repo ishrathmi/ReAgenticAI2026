@@ -1,8 +1,8 @@
 """Range, gap and W2a/W2b checks."""
 import pytest
 
-from filips_agent.checks import check_rows, conflicts, name_key
-from filips_agent.normalize_values import COLUMNS, NA
+from energy_extractor.checks import check_rows, conflicts, name_key
+from energy_extractor.normalize_values import COLUMNS, NA
 
 
 def row(**kw):

@@ -1,6 +1,6 @@
 # Image tools: DECIMER and MolScribe
 
-`python -m filips_agent images` checks each extracted structure against the drawing of that compound in the paper. It needs two optional image-recognition tools, each in its own Python environment next to the main `.venv`:
+`python -m energy_extractor images` checks each extracted structure against the drawing of that compound in the paper. It needs two optional image-recognition tools, each in its own Python environment next to the main `.venv`:
 
 | Environment | Tools | Disk |
 |---|---|---|
@@ -11,7 +11,7 @@ They're separate because their libraries conflict (DECIMER Segmentation needs Te
 
 ## Install (Windows, Python 3.10)
 
-From the `filips_agent/` folder:
+From the `energy_extractor/` folder:
 
 ```
 py -3.10 -m venv .venv-decimer
@@ -31,4 +31,4 @@ If MolScribe isn't installed, `images` runs with DECIMER alone.
 - `decimer_worker.py`: segmentation, label OCR and DECIMER reading, for the page images it's given.
 - `molscribe_worker.py`: MolScribe reading of the cropped drawings.
 
-Both take a JSON job file and write a JSON result; `filips_agent/ocsr.py` runs them as subprocesses and caches the results in `data/cache/ocsr/`.
+Both take a JSON job file and write a JSON result; `energy_extractor/ocsr.py` runs them as subprocesses and caches the results in `data/cache/ocsr/`.

@@ -4,10 +4,10 @@ import sqlite3
 
 import pytest
 
-from filips_agent import review
-from filips_agent.agents import extractor
-from filips_agent.ledger import DONE, IRRELEVANT, PARTIAL, REVIEW, TO_READ, Ledger
-from filips_agent.normalize_values import normalize_record
+from energy_extractor import review
+from energy_extractor.agents import extractor
+from energy_extractor.ledger import DONE, IRRELEVANT, PARTIAL, REVIEW, TO_READ, Ledger
+from energy_extractor.normalize_values import normalize_record
 
 
 def compound(name="X1", smiles="c1ccsc1", ip=5.4):

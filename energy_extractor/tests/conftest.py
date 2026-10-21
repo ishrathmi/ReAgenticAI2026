@@ -1,7 +1,7 @@
 """Shared test setup: no test may call OPSIN or PubChem."""
 import pytest
 
-from filips_agent import resolve
+from energy_extractor import resolve
 
 
 @pytest.fixture(autouse=True)

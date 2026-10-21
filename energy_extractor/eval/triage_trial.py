@@ -1,6 +1,6 @@
 """Compare triage models on the same abstracts, so a person can pick one.
 
-Run from the filips_agent/ folder:  .venv/Scripts/python -m eval.triage_trial [--n 30]
+Run from the energy_extractor/ folder:  .venv/Scripts/python -m eval.triage_trial [--n 30]
 
 Takes papers cited by the gold papers that have an abstract in OpenAlex, runs abstract
 triage (rules A1-A4) with each model, and writes data/output/triage_trial.csv with every
@@ -11,9 +11,9 @@ import csv
 import random
 from pathlib import Path
 
-from filips_agent import fetch, llm
-from filips_agent.agents import triage
-from filips_agent.ledger import DATA_DIR
+from energy_extractor import fetch, llm
+from energy_extractor.agents import triage
+from energy_extractor.ledger import DATA_DIR
 
 GOLD = Path(__file__).with_name("gold_labels.csv")
 MODELS = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"]

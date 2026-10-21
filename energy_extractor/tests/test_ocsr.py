@@ -4,9 +4,9 @@ import json
 import pymupdf
 import pytest
 
-from filips_agent import fetch, ocsr, resolve
-from filips_agent.ledger import Ledger
-from filips_agent.normalize_values import normalize_record
+from energy_extractor import fetch, ocsr, resolve
+from energy_extractor.ledger import Ledger
+from energy_extractor.normalize_values import normalize_record
 
 THIOPHENE_C6 = "CCCCCCc1ccsc1"
 

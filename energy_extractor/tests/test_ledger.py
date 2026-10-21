@@ -2,10 +2,10 @@ import csv
 
 import pytest
 
-from filips_agent.dois import clean_doi, doi_slug, find_dois
-from filips_agent.ledger import (AWAITING_PDF, DONE, IRRELEVANT, PARTIAL, REVIEW, TO_READ,
+from energy_extractor.dois import clean_doi, doi_slug, find_dois
+from energy_extractor.ledger import (AWAITING_PDF, DONE, IRRELEVANT, PARTIAL, REVIEW, TO_READ,
                                  TO_TRIAGE, Ledger)
-from filips_agent.normalize_values import normalize_record
+from energy_extractor.normalize_values import normalize_record
 
 
 @pytest.fixture

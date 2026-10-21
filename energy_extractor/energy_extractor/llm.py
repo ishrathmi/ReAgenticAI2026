@@ -30,7 +30,7 @@ PRICES = {
 _FALLBACK_MODELS = {"claude-opus-5-5", "claude-sonnet-5-5"}
 
 USAGE_LOG = DATA_DIR / "logs" / "usage.jsonl"
-# filips_agent/.env (gitignored) holds this project's own key: OPENROUTER_API_KEY=sk-or-...
+# energy_extractor/.env (gitignored) holds this project's own key: OPENROUTER_API_KEY=sk-or-...
 # (or ANTHROPIC_API_KEY=sk-ant-... to call Anthropic directly)
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 OPENROUTER_URL = "https://openrouter.ai/api"  # Anthropic Messages API compatible

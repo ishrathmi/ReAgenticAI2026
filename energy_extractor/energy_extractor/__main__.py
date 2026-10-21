@@ -1,18 +1,18 @@
-"""Command line, run from the filips_agent/ folder:
+"""Command line, run from the energy_extractor/ folder:
 
-    python -m filips_agent add 10.1002/adma.201602776 ...   seed the reading list
-    python -m filips_agent info 10.1002/adma.201602776      OpenAlex summary of one paper
-    python -m filips_agent fetch [--batch 10]               get full texts, or wish-list them
-    python -m filips_agent inbox [--no-llm]                 file PDFs dropped in data/inbox/
-    python -m filips_agent extract [--batch 10] [--model M] read papers on the reading list
-    python -m filips_agent triage [--batch 50] [--model M]  judge abstracts of "possible" references
-    python -m filips_agent run [--batch 10]                 inbox, extract, triage, export
-    python -m filips_agent review                           apply decisions typed into review.csv
-    python -m filips_agent reprocess                        rebuild records from saved extractions (no API)
-    python -m filips_agent images [--doi D] [--si] [--all]  check structures in review against the paper's drawings
-    python -m filips_agent web [--port 8000]                browser page at http://127.0.0.1:8000
-    python -m filips_agent status                           counts per status
-    python -m filips_agent export                           write the CSV tables to data/output/
+    python -m energy_extractor add 10.1002/adma.201602776 ...   seed the reading list
+    python -m energy_extractor info 10.1002/adma.201602776      OpenAlex summary of one paper
+    python -m energy_extractor fetch [--batch 10]               get full texts, or wish-list them
+    python -m energy_extractor inbox [--no-llm]                 file PDFs dropped in data/inbox/
+    python -m energy_extractor extract [--batch 10] [--model M] read papers on the reading list
+    python -m energy_extractor triage [--batch 50] [--model M]  judge abstracts of "possible" references
+    python -m energy_extractor run [--batch 10]                 inbox, extract, triage, export
+    python -m energy_extractor review                           apply decisions typed into review.csv
+    python -m energy_extractor reprocess                        rebuild records from saved extractions (no API)
+    python -m energy_extractor images [--doi D] [--si] [--all]  check structures in review against the paper's drawings
+    python -m energy_extractor web [--port 8000]                browser page at http://127.0.0.1:8000
+    python -m energy_extractor status                           counts per status
+    python -m energy_extractor export                           write the CSV tables to data/output/
 """
 import argparse
 import json
@@ -25,7 +25,7 @@ from .pipeline import apply_and_export, do_extract, do_images, do_inbox, do_tria
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="filips_agent")
+    p = argparse.ArgumentParser(prog="energy_extractor")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("add").add_argument("dois", nargs="+")
     sub.add_parser("info").add_argument("doi")

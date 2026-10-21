@@ -1,7 +1,7 @@
 """OPSIN/PubChem cross-checks, with fake lookups (no network)."""
 import pytest
 
-from filips_agent import resolve
+from energy_extractor import resolve
 
 
 @pytest.fixture

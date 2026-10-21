@@ -1,6 +1,6 @@
 """Score the agent's stored results against eval/gold_labels.csv.
 
-Run from the filips_agent/ folder:  .venv/Scripts/python -m eval.score
+Run from the energy_extractor/ folder:  .venv/Scripts/python -m eval.score
 
 For each gold row, the agent's rows for the same paper are matched by structure
 (InChIKey for small molecules, canonical CXSMILES for polymers), falling back to a shared
@@ -13,9 +13,9 @@ from pathlib import Path
 
 from rdkit import Chem, RDLogger
 
-from filips_agent.dois import clean_doi
-from filips_agent.ledger import Ledger
-from filips_agent.structures import canonicalize, is_polymer
+from energy_extractor.dois import clean_doi
+from energy_extractor.ledger import Ledger
+from energy_extractor.structures import canonicalize, is_polymer
 
 RDLogger.DisableLog("rdApp.*")
 GOLD = Path(__file__).with_name("gold_labels.csv")

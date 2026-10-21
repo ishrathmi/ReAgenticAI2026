@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from rdkit import Chem
 
-from filips_agent.structures import canonicalize, formula_matches
+from energy_extractor.structures import canonicalize, formula_matches
 
 GOLD = list(csv.DictReader(open(Path(__file__).parents[1] / "eval" / "gold_labels.csv", encoding="utf-8")))
 IT_M = next(r["smiles"] for r in GOLD if r["name"] == "IT-M")

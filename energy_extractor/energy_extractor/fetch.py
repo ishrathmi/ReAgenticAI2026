@@ -33,7 +33,7 @@ _BATCH = 50  # values per OpenAlex OR-filter
 
 def _get(url, tries=3, data=None):
     """GET, or POST when data (bytes) is given; retries on rate limits and server errors."""
-    req = urllib.request.Request(url, data=data, headers={"User-Agent": "filips_agent/0.1"})
+    req = urllib.request.Request(url, data=data, headers={"User-Agent": "energy_extractor/0.1"})
     for attempt in range(tries):
         try:
             with urllib.request.urlopen(req, timeout=60) as r:

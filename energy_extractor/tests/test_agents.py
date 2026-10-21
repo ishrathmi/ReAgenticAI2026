@@ -5,9 +5,9 @@ import json
 import pymupdf
 import pytest
 
-from filips_agent import fetch, llm, resolve
-from filips_agent.agents import extractor, triage
-from filips_agent.ledger import AWAITING_SI, DONE, IRRELEVANT, PARTIAL, REVIEW, TO_READ, TO_TRIAGE, Ledger
+from energy_extractor import fetch, llm, resolve
+from energy_extractor.agents import extractor, triage
+from energy_extractor.ledger import AWAITING_SI, DONE, IRRELEVANT, PARTIAL, REVIEW, TO_READ, TO_TRIAGE, Ledger
 
 SPIRO = ("COc1ccc(N(c2ccc(OC)cc2)c2ccc3c(c2)C2(c4cc(N(c5ccc(OC)cc5)c5ccc(OC)cc5)ccc4-3)c3cc(N(c4ccc(OC)cc4)"
          "c4ccc(OC)cc4)ccc3-c3ccc(N(c4ccc(OC)cc4)c4ccc(OC)cc4)cc32)cc1")
@@ -211,7 +211,7 @@ def test_review_decision_keeps_a_paper_waiting_for_its_si(ledger, paper, monkeyp
     monkeypatch.setattr(llm, "ask_json", FakeClaude(answer(compound(structure_confident=False), needs_si=True)))
     extractor.extract(ledger, "10.1000/x")
     [rec] = ledger.records("review")
-    from filips_agent import review
+    from energy_extractor import review
     review.apply_rows(ledger, [{"id": rec["id"], "decision": "accept"}])
     assert ledger.get("10.1000/x")["status"] == AWAITING_SI
 

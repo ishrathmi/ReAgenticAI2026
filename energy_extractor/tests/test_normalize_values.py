@@ -1,6 +1,6 @@
 import pytest
 
-from filips_agent.normalize_values import (NA, basis_set_notation, method_label, normalize_record,
+from energy_extractor.normalize_values import (NA, basis_set_notation, method_label, normalize_record,
                                            reanchor, to_ev)
 
 
