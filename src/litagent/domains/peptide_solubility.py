@@ -135,6 +135,25 @@ def paper_flags(text: str) -> dict:
     return {"paper_mentions_c_amide": bool(C_AMIDE_RE.search(text or ""))}
 
 
+# A peptide sequence written in a passage: three-letter code (Ala-Gly) or six or more one-letter residues
+SEQUENCE_IN_TEXT_RE = re.compile(r"\b[A-Za-z]{3}(?:-[A-Za-z]{3})+\b|\b[ACDEFGHIKLMNPQRSTVWY]{6,}\b")
+COSOLVENT_RE = re.compile(r"\b(DMSO|ethanol|EtOH|methanol|MeOH|acetonitrile|MeCN|HFIP|TFE|DMF|glycerol|"
+                          r"dioxane|isopropanol|IPA|acetone)\b", re.I)
+PERCENT_RE = re.compile(r"\d+(?:\.\d+)?\s*%")
+
+
+def passage_flags(text: str) -> dict:
+    """Facts about the passage a record came from, kept with the record so checks can be re-run later."""
+    text = text or ""
+    seq = any(_is_sequence(m.group(0)) for m in SEQUENCE_IN_TEXT_RE.finditer(text))
+    return {"passage_has_sequence": seq,
+            "passage_has_cosolvent_percent": bool(COSOLVENT_RE.search(text) and PERCENT_RE.search(text))}
+
+
+def _is_sequence(s: str) -> bool:
+    return bool(_three_letter(s)) if "-" in s else to_one_letter(s) is not None
+
+
 def paper_context(text: str, limit: int = 6) -> str:
     """Sentences from the whole paper that a repair may need (here: statements about C-terminal amidation)."""
     out = []
@@ -159,6 +178,16 @@ REPAIRS = {
     "evidence contains a unit but solubility_unit is empty": (
         ["solubility_unit"],
         "The evidence quote contains a unit but solubility_unit is empty. Give the unit exactly as written."),
+    "passage contains a peptide sequence but sequence is empty": (
+        ["sequence"],
+        "The passage contains a peptide sequence (for example in a table header or caption, such as "
+        "'AA (ala-ala)'). Give the sequence of THIS peptide exactly as written, and quote where it appears "
+        "in repair_evidence. If no sequence in the passage belongs to this peptide, keep null."),
+    "solvent is a mixture but its composition is missing": (
+        ["solvent"],
+        "The solvent is a mixture, and the passage states its composition for each row or condition. Give "
+        "the solvent with the composition for THIS record, e.g. \"water/DMSO, 20% DMSO by mass\", and quote "
+        "the row or sentence in repair_evidence."),
     "paper mentions C-terminal amidation but c_terminus is empty": (
         ["c_terminus", "n_terminus"],
         "The paper describes C-terminal amidation (see PAPER CONTEXT). Decide whether it applies to THIS "
@@ -211,7 +240,15 @@ def enrich(rec: dict) -> dict:
     if rec.get("solubility_value") is None and not rec.get("solubility_qualitative"):
         reasons.append("no value or qualitative result")
     if not rec.get("sequence"):
-        reasons.append("sequence not found (not in passage or linked SI table)")
+        if rec.get("passage_has_sequence"):
+            reasons.append("passage contains a peptide sequence but sequence is empty")
+        else:
+            caveats.append("sequence not stated in passage or linked SI table")
+    solvent = str(rec.get("solvent") or "")
+    is_mixture = bool(re.search(r"/|mixture|\bmix\b", solvent, re.I) or len(COSOLVENT_RE.findall(solvent)) > 1
+                      or (COSOLVENT_RE.search(solvent) and re.search(r"\bwater\b", solvent, re.I)))
+    if is_mixture and not re.search(r"\d", solvent) and rec.get("passage_has_cosolvent_percent"):
+        reasons.append("solvent is a mixture but its composition is missing")
 
     rec.update(sequence_one_letter=seq1, calc_mw_g_mol=mw, solubility_mg_per_ml=mgml,
                conversion_note=note, needs_review=bool(reasons), review_reason="; ".join(reasons),

@@ -254,3 +254,49 @@ def test_flag_diagnosis():
     assert summary == {"errors caught": 1, "errors total": 1, "correct records flagged": 1, "correct records total": 1}
     assert rules == {"low model confidence": (1, 0), "unit '…' not found in source text": (1, 1)}
     assert missed == {}
+
+
+def test_control_characters_from_pdf(tmp_path):
+    """PDF control characters: decoded as a minus in units, removed elsewhere, never break the Excel file."""
+    from litagent.domains.peptide_solubility import to_mg_per_ml
+    from litagent.tools.extract import coerce
+    _, schema = load_profile("peptide_solubility")
+    rec = coerce({"solubility_unit": "mg ml\x011", "notes": "23 \x01 2 °C"}, schema)
+    assert rec["solubility_unit"] == "mg ml-1" and rec["notes"] == "23  2 °C"
+    assert to_mg_per_ml(2, rec["solubility_unit"], None)[0] == 2.0
+    _, xlsx = output.write([{"peptide_name": "P1", "evidence": "at 23 \x01 2 °C"}], [], schema, str(tmp_path), "db")
+    assert load_workbook(xlsx).sheetnames[0] == "Records"          # writing did not raise
+
+
+def test_sequence_and_solvent_rules():
+    from litagent.domains.peptide_solubility import enrich, passage_flags
+    caption = "Table 2 The solubility of AA (ala-ala) and GG (gly-gly) in water-DMSO mixture from 0% to 80%."
+    assert passage_flags(caption) == {"passage_has_sequence": True, "passage_has_cosolvent_percent": True}
+    assert passage_flags("Solubility was measured by HPLC in water.") == {
+        "passage_has_sequence": False, "passage_has_cosolvent_percent": False}
+    base = {"peptide_name": "P3", "solubility_value": 1, "solubility_unit": "mg/mL", "unit_in_source": True,
+            "evidence_verified": True, "c_terminus": "free"}
+    # No sequence anywhere in the passage: a gap in the source, not an error
+    rec = enrich({**base, "passage_has_sequence": False})
+    assert not rec["needs_review"] and "sequence not stated" in rec["data_caveats"]
+    # The passage contains a sequence the model did not extract: review
+    rec = enrich({**base, "passage_has_sequence": True})
+    assert rec["needs_review"] and "sequence is empty" in rec["review_reason"]
+    # Mixture without composition, while the passage gives percentages: review
+    seq = {**base, "peptide_name": "AA (ala-ala)"}
+    rec = enrich({**seq, "solvent": "water-DMSO mixture", "passage_has_cosolvent_percent": True})
+    assert rec["needs_review"] and "composition is missing" in rec["review_reason"]
+    for solvent in ("water/DMSO, 20% DMSO by mass", "water", "DMSO"):
+        assert not enrich({**seq, "solvent": solvent, "passage_has_cosolvent_percent": True})["needs_review"]
+
+
+def test_solvent_scoring_rejects_added_cosolvent():
+    import importlib.util, pathlib
+    spec = importlib.util.spec_from_file_location("cm", pathlib.Path(__file__).parents[1] / "compare_models.py")
+    cm = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cm)
+    gold = {"solvent": "water"}
+    assert cm.field_checks(gold, {"solvent": "water"})["solvent"]
+    assert not cm.field_checks(gold, {"solvent": "water-DMSO mixture"})["solvent"]
+    assert cm.field_checks({"solvent": "water/DMSO, 20% DMSO by mass"},
+                           {"solvent": "water/DMSO, 20% DMSO by mass"})["solvent"]

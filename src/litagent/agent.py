@@ -95,6 +95,7 @@ def run(papers_config: dict, schema: dict, model, root: Path | None = None, dry_
     system_prompt = build_system_prompt(schema, cfg["task"], cfg.get("instructions", ""), evidence_key)
     enrich = domains.load(cfg.get("domain"))
     paper_flags = domains.load_paper_flags(cfg.get("domain"))
+    passage_flags = domains.load_hook(cfg.get("domain"), "passage_flags", lambda text: {})
     rep_cfg = cfg.get("repair") or {}
     rep_rules = {**GENERIC, **(domains.load_hook(cfg.get("domain"), "REPAIRS", {}) or {})}
     context_fn = domains.load_hook(cfg.get("domain"), "paper_context", lambda text: "")
@@ -163,7 +164,9 @@ def run(papers_config: dict, schema: dict, model, root: Path | None = None, dry_
                         for rec in found:
                             rec["_problems"] = [f"table only {cov['coverage']:.0%} extracted "
                                                 f"({cov['matched']}/{cov['cells']} values)"]
+            pflags = passage_flags(c.text)
             for rec in found:
+                rec.update(pflags)
                 rec["_problems"] = rec.get("_problems", []) + _schema_problems(rec, schema)
                 rec.update(doi=doc.doi, paper_title=doc.title, source=meta["source"],
                            source_file=path.name, page=c.page, location=c.label, _group=group, _passage=c.text,

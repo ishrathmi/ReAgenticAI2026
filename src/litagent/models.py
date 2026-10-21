@@ -33,7 +33,8 @@ class OpenRouterModel:
         if not api_key:
             raise RuntimeError("OPENROUTER_API_KEY is not set. Copy .env.example to .env and add your key.")
         self.model = model or os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
-        self.client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key)
+        # Fail a stalled call after 90 s and retry up to 3 times, instead of the client default of 600 s
+        self.client = OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key, timeout=90.0, max_retries=3)
         self.tokens_in = 0
         self.tokens_out = 0
         self.last_usage: dict = {}

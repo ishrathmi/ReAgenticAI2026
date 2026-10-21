@@ -7,6 +7,7 @@ from pathlib import Path
 
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.utils import get_column_letter
 
 AGENT_COLUMNS = ["evidence_verified", "evidence_match", "unit_in_source", "needs_review", "review_reason",
@@ -83,5 +84,7 @@ def _sheet(ws, cols: list, rows: list, highlight: str | None = None) -> None:
 
 def _cell(v):
     if isinstance(v, (list, dict)):
-        return str(v)
+        v = str(v)
+    if isinstance(v, str):                    # PDF text can contain control characters Excel rejects
+        v = ILLEGAL_CHARACTERS_RE.sub("", v)
     return v

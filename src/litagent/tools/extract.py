@@ -106,6 +106,11 @@ def coerce(record: dict, schema: dict) -> dict:
         if spec.get("x-provenance"):
             continue
         v = record.get(name)
+        if isinstance(v, str):
+            # Some PDFs encode glyphs (minus, ±, ×) as control characters. Before a final "1" in a unit
+            # ("mg mL\x011") it is a minus sign; anywhere else it cannot be decoded and is removed.
+            v = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f](?=1$)", "-", v.strip()) if name.endswith("unit") else v
+            v = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", v)
         if isinstance(v, str) and v.strip().lower() in ("", "null", "none", "n/a", "na", "not stated"):
             v = None
         if isinstance(v, str) and name.endswith("operator"):

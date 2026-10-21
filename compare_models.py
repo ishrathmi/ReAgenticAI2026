@@ -41,7 +41,8 @@ from litagent.tools.extract import coerce  # noqa: E402
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
 INK, INK_2, GRID = "#0b0b0b", "#52514e", "#e6e5e0"
 KEEP = ["source_file", "location", "page", "doi", "paper_title", "source", "evidence_verified",
-        "evidence_match", "sequence_source", "model", "paper_mentions_c_amide", "repair_outcome"]
+        "evidence_match", "sequence_source", "model", "paper_mentions_c_amide", "repair_outcome",
+        "passage_has_sequence", "passage_has_cosolvent_percent"]
 
 
 # --- loading -------------------------------------------------------------------------------
@@ -67,7 +68,8 @@ def rescore(rows: list, schema: dict, enrich) -> list:
         rec["evidence_verified"] = str(r.get("evidence_verified")).lower() == "true"
         uis = str(r.get("unit_in_source", "")).lower()
         rec["unit_in_source"] = True if uis == "true" else False if uis == "false" else None
-        rec["paper_mentions_c_amide"] = str(r.get("paper_mentions_c_amide")).lower() == "true"
+        for k in ("paper_mentions_c_amide", "passage_has_sequence", "passage_has_cosolvent_percent"):
+            rec[k] = str(r.get(k)).lower() == "true"
         try:
             rec["confidence"] = float(r["confidence"]) if r.get("confidence") else None
         except ValueError:
@@ -195,7 +197,9 @@ def field_checks(g: dict, r: dict) -> dict:
     gsol = g.get("solvent") or ""
     tokens = re.findall(r"dmso|ethanol|water|pbs|\d+%", gsol.lower())
     rsol = (r.get("solvent") or "").lower()
-    out["solvent"] = (not gsol and not rsol) or (bool(tokens) and all(t in rsol for t in tokens))
+    # every solvent named in the reference must be in the record, and the record must not add a co-solvent
+    extra = set(re.findall(r"dmso|ethanol|methanol|acetonitrile|hfip|tfe|dmf", rsol)) - set(tokens)
+    out["solvent"] = (not gsol and not rsol) or (bool(tokens) and all(t in rsol for t in tokens) and not extra)
     if g.get("sequence"):
         out["sequence"] = to_one_letter(g["sequence"]) == (r.get("sequence_one_letter") or to_one_letter(r.get("sequence")))
     gc = (g.get("c_terminus") or "").lower()
