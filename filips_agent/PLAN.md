@@ -30,7 +30,7 @@ Because Claude reads PDFs directly (pages as text and images), the planned separ
 | `llm.py` | The only place that calls Claude: structured JSON output validated against a schema, refusal handling, prompt caching, and cost of every call logged to `data/logs/usage.jsonl`. |
 | `normalize_values.py` | Sign and unit conversion, one row per measurement set, Fc re-anchoring to 4.8 eV, method vocabulary incl. `arbitrary`, `n/a` filling. |
 | `structures.py` | RDKit canonicalisation (keeps and renumbers CXSMILES `m:` blocks), formula check incl. HRMS ions (P3e). |
-| `resolve.py` | Looks up each compound's names in OPSIN and PubChem (answers cached in `data/cache/structures/`) and compares the structures with Claude's by atom skeleton. A disagreement → review; a missing structure is filled in (from PubChem only via review). Polymers and CXSMILES are skipped. |
+| `resolve.py` | Looks up each compound's names in OPSIN and PubChem (answers cached in `data/cache/structures/`) and compares them with Claude's as RDKit canonical SMILES without stereo. A disagreement → review; a missing structure is filled in (from PubChem only via review). Polymers and CXSMILES are skipped. |
 | `checks.py` | Usual ranges (IP 4–7, EA 2–4.5, DFT HOMO −7.5 to −3.5, DFT LUMO −5 to 0 eV), IP > EA, HOMO < LUMO, DFT gap within 1 eV of the measured gap; W2a/W2b name–SMILES conflicts with the data table from other papers. Anything flagged → review. (The quote check is in the extractor.) |
 
 ## Structures (P3): several routes, then compare
@@ -39,7 +39,7 @@ Because Claude reads PDFs directly (pages as text and images), the planned separ
 2. **Known compounds** *(built)*: PubChem PUG REST lookup by name or synonym (P3 well-known, e.g. P3HT, PC71BM, Y6, spiro-OMeTAD). The team's own dataset counts as a source once it grows.
 3. **Image → structure:** crop the scheme/figure with pymupdf and run an optical structure recognition tool (OCSR): **DECIMER** (open source, best general accuracy) with **MolScribe** as a second opinion. Both have heavy ML dependencies (TensorFlow / PyTorch), so they're an optional install.
 4. **Vision LLM:** the structure resolver also reads the image directly.
-5. **Decide:** canonicalise all candidates with RDKit and compare them. *Built for routes 1–2:* comparison by atom skeleton (heavy atoms and connections, ignoring bond orders, charges and stereo), because PubChem writes fullerenes without double bonds and drawings differ in Kekulé form. If the routes agree, accept. If they disagree, the resolver checks plausibility against the image, name and formula. Still unsure → review (P3c). Small molecules always get the formula check (P3e).
+5. **Decide:** canonicalise all candidates with RDKit and compare them. *Built for routes 1–2:* comparison as RDKit canonical SMILES without stereo (E/Z and R/S are often drawn differently). Bond orders and charges must match, so unusual drawings such as PubChem's fullerenes (no double bonds) go to review. If the routes agree, accept. If they disagree, the resolver checks plausibility against the image, name and formula. Still unsure → review (P3c). Small molecules always get the formula check (P3e).
 
 Polymers: `*` end markers on the repeat unit. Ambiguous regiochemistry: CXSMILES (P3d).
 

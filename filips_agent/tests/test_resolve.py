@@ -12,11 +12,12 @@ def hits(monkeypatch):
     return table
 
 
-def test_skeleton_ignores_bond_orders_charges_and_kekule_form():
-    assert resolve.skeleton("c1ccccc1") == resolve.skeleton("C1=CC=CC=C1") == resolve.skeleton("C1CCCCC1")
-    assert resolve.skeleton("CC(=O)[O-]") == resolve.skeleton("CC(O)O")
-    assert resolve.skeleton("CCO") != resolve.skeleton("COC")
-    assert resolve.skeleton("not a smiles") is None
+def test_compare_key_is_canonical_smiles_without_stereo():
+    assert resolve.compare_key("c1ccccc1") == resolve.compare_key("C1=CC=CC=C1")
+    assert resolve.compare_key("F/C=C/F") == resolve.compare_key("F/C=C\F") == resolve.compare_key("FC=CF")
+    assert resolve.compare_key("C1=CC=CC=C1") != resolve.compare_key("C1CCCCC1")  # bond orders count
+    assert resolve.compare_key("CC(=O)[O-]") != resolve.compare_key("CC(=O)O")      # and charges
+    assert resolve.compare_key("not a smiles") is None
 
 
 def test_matching_lookup_confirms_silently(hits):

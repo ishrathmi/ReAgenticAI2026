@@ -4,9 +4,9 @@ OPSIN parses systematic (IUPAC) names; PubChem knows many materials by trade nam
 abbreviation (spiro-OMeTAD, PC71BM, Y6). Answers, including "not found", are cached in
 data/cache/structures/, so each name is looked up once.
 
-Structures are compared by their skeleton: heavy atoms and how they are connected, ignoring
-bond orders, charges, hydrogens and stereo. PubChem writes fullerenes without double bonds,
-and drawings differ in Kekulé form or tautomer, so a stricter key would give false alarms.
+Structures are compared as RDKit canonical SMILES without stereo (E/Z, R/S), which papers
+and PubChem often draw differently. Bond orders and charges must match, so an unusual drawing
+(e.g. PubChem's fullerenes, written without double bonds) goes to review.
 
 Polymers and CXSMILES are not checked: OPSIN can't name them and PubChem stores only monomers.
 """
@@ -74,22 +74,10 @@ def lookup(source, name, cache_dir=CACHE_DIR):
     return hits
 
 
-def skeleton(smiles):
-    """Canonical SMILES of the heavy-atom graph with all bonds single; None if unreadable."""
+def compare_key(smiles):
+    """RDKit canonical SMILES without stereo; None if unreadable."""
     mol = Chem.MolFromSmiles(smiles or "")
-    if mol is None:
-        return None
-    rw = Chem.RWMol(mol)
-    for atom in rw.GetAtoms():
-        atom.SetFormalCharge(0)
-        atom.SetIsAromatic(False)
-        atom.SetNumExplicitHs(0)
-        atom.SetNoImplicit(True)
-        atom.SetChiralTag(Chem.ChiralType.CHI_UNSPECIFIED)
-    for bond in rw.GetBonds():
-        bond.SetBondType(Chem.BondType.SINGLE)
-        bond.SetIsAromatic(False)
-    return Chem.MolToSmiles(rw, isomericSmiles=False)
+    return Chem.MolToSmiles(mol, isomericSmiles=False) if mol else None
 
 
 def cross_check(smiles, names):
@@ -101,18 +89,18 @@ def cross_check(smiles, names):
     """
     if smiles and (is_polymer(smiles) or " |" in smiles):
         return smiles, [], None
-    hits = []  # (source id, name, smiles, skeleton)
+    hits = []  # (source id, name, smiles, compare key)
     for name in [n for n in names if n and n.strip()][:MAX_NAMES]:
         for source in SOURCES:
             for hit in lookup(source, name.strip()) or []:
-                key = skeleton(hit["smiles"])
+                key = compare_key(hit["smiles"])
                 if key:
                     hits.append((hit["id"], name, hit["smiles"], key))
     if not hits:
         return smiles, [], None
 
     if smiles:
-        mine = skeleton(smiles)
+        mine = compare_key(smiles)
         agree = [h for h in hits if h[3] == mine]
         if agree:
             return smiles, [], None
