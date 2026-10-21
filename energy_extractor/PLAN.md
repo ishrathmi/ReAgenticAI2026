@@ -79,12 +79,12 @@ seed DOIs (LitVault digest, manual list)
 
 ```
 energy_extractor/
-  RULES.md  PLAN.md  requirements.txt
+  RULES.md  PLAN.md  requirements.txt  .env.example
   docs/                     workflow-overview.png, workflow-detailed.png
   energy_extractor/         Python package (python -m energy_extractor …)
     pipeline.py             the steps, shared by the command line and the page
     ledger.py fetch.py llm.py normalize_values.py structures.py resolve.py checks.py review.py
-    figures.py ocsr.py dois.py web.py __main__.py
+    figures.py ocsr.py dois.py settings.py web.py __main__.py
     agents/                 inbox_sorter.py triage.py extractor.py (schemas live next to each agent)
     web/                    index.html, the browser page
   ocsr/                     image-tool workers + install notes (run in .venv-decimer / .venv-molscribe)

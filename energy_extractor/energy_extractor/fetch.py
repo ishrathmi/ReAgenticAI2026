@@ -1,15 +1,14 @@
 """Paper metadata from OpenAlex, and full texts from open access or the inbox (RULES.md W6).
 
 Set OPENALEX_API_KEY (free key from openalex.org, higher daily limit) or at least
-OPENALEX_EMAIL. Responses are cached in data/cache/openalex/, so a paper costs API
-calls only once.
+OPENALEX_EMAIL, in .env or the environment (settings.py). Responses are cached in
+data/cache/openalex/, so a paper costs API calls only once.
 
 Full texts live in data/pdfs/ as <doi slug>.pdf, with SI as <doi slug>_SI<n>.<ext>.
 PDFs you download yourself go in data/inbox/ under any name; collect_inbox() finds
 their DOI and files them.
 """
 import json
-import os
 import re
 import shutil
 import time
@@ -20,6 +19,7 @@ from pathlib import Path
 
 from .dois import DOI_RE, clean_doi, doi_slug, find_dois
 from .ledger import AWAITING_PDF, AWAITING_SI, DATA_DIR, TO_READ, WISHED
+from .settings import setting
 
 OPENALEX = "https://api.openalex.org"
 CACHE_DIR = DATA_DIR / "cache" / "openalex"
@@ -48,10 +48,10 @@ def _get(url, tries=3, data=None):
 
 
 def _openalex(path, **params):
-    if os.environ.get("OPENALEX_API_KEY"):
-        params["api_key"] = os.environ["OPENALEX_API_KEY"]
-    elif os.environ.get("OPENALEX_EMAIL"):
-        params["mailto"] = os.environ["OPENALEX_EMAIL"]
+    if key := setting("OPENALEX_API_KEY"):
+        params["api_key"] = key
+    elif email := setting("OPENALEX_EMAIL"):
+        params["mailto"] = email
     query = urllib.parse.urlencode(params, safe=":|,/")
     return json.loads(_get(f"{OPENALEX}{path}" + (f"?{query}" if query else "")))
 

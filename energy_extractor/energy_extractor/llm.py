@@ -5,7 +5,6 @@ accounting live here. Usage of every call is appended to data/logs/usage.jsonl.
 """
 import base64
 import json
-import os
 import time
 from pathlib import Path
 
@@ -13,6 +12,7 @@ import anthropic
 import jsonschema
 
 from .ledger import DATA_DIR
+from .settings import setting
 
 MODELS = {
     "inbox": "claude-haiku-5-5",
@@ -31,8 +31,7 @@ _FALLBACK_MODELS = {"claude-opus-5-5", "claude-sonnet-5-5"}
 
 USAGE_LOG = DATA_DIR / "logs" / "usage.jsonl"
 # energy_extractor/.env (gitignored) holds this project's own key: OPENROUTER_API_KEY=sk-or-...
-# (or ANTHROPIC_API_KEY=sk-ant-... to call Anthropic directly)
-ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+# (or ANTHROPIC_API_KEY=sk-ant-... to call Anthropic directly); see settings.py
 OPENROUTER_URL = "https://openrouter.ai/api"  # Anthropic Messages API compatible
 _client = None
 _via_openrouter = False
@@ -42,26 +41,17 @@ class LLMError(RuntimeError):
     """The model refused, ran out of tokens, or returned JSON that fails the schema."""
 
 
-def _project_key(name):
-    if ENV_FILE.exists():
-        for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-            key, _, value = line.partition("=")
-            if key.strip() == name and value.strip():
-                return value.strip().strip("\"'")
-    return os.environ.get(name) or None
-
-
 def client():
     """OpenRouter if OPENROUTER_API_KEY is set (.env first, then environment), else Anthropic directly."""
     global _client, _via_openrouter
     if _client is None:
-        key = _project_key("OPENROUTER_API_KEY")
+        key = setting("OPENROUTER_API_KEY")
         _via_openrouter = key is not None
         if _via_openrouter:
             _client = anthropic.Anthropic(base_url=OPENROUTER_URL, auth_token=key)
             _client.api_key = None  # else the SDK also sends any ANTHROPIC_API_KEY from the environment
         else:
-            _client = anthropic.Anthropic(api_key=_project_key("ANTHROPIC_API_KEY"))
+            _client = anthropic.Anthropic(api_key=setting("ANTHROPIC_API_KEY"))
     return _client
 
 
