@@ -33,11 +33,17 @@ class FakeClaude:
 # --- triage (A1-A4) ------------------------------------------------------------------
 
 @pytest.mark.parametrize("answers, status, reason", [
-    ({"is_osc": False, "novel_osc": False, "energy_data_likely": False}, IRRELEVANT, "Not organic semiconductors"),
-    ({"is_osc": True, "novel_osc": False, "energy_data_likely": False}, IRRELEVANT, "No energy data expected"),
-    ({"is_osc": True, "novel_osc": True, "energy_data_likely": False}, TO_READ, "r"),
-    ({"is_osc": True, "novel_osc": False, "energy_data_likely": True}, TO_READ, "r"),
-    ({"is_osc": False, "novel_osc": True, "energy_data_likely": True}, IRRELEVANT, "Not organic semiconductors"),
+    ({"is_osc": False, "novel_osc": False, "energy_data_likely": False}, IRRELEVANT,
+     "Not organic semiconductors (abstract, A1): r"),
+    ({"is_osc": True, "novel_osc": False, "energy_data_likely": False}, IRRELEVANT,
+     "No energy data expected (abstract, A4): r"),
+    ({"is_osc": True, "novel_osc": True, "energy_data_likely": False}, TO_READ, "To read (A2, novel semiconductor): r"),
+    ({"is_osc": True, "novel_osc": False, "energy_data_likely": True}, TO_READ,
+     "To read (A3, original energy data likely): r"),
+    ({"is_osc": True, "novel_osc": True, "energy_data_likely": True}, TO_READ,
+     "To read (A2, novel semiconductor; A3, original energy data likely): r"),
+    ({"is_osc": False, "novel_osc": True, "energy_data_likely": True}, IRRELEVANT,
+     "Not organic semiconductors (abstract, A1): r"),
 ])
 def test_triage_verdict(answers, status, reason):
     assert triage.verdict(dict(answers, reason="r")) == (status, reason)
@@ -56,7 +62,7 @@ def test_triage_run_updates_ledger(ledger, monkeypatch):
     assert ledger.get("10.1000/a")["status"] == TO_READ
     b = ledger.get("10.1000/b")
     assert (b["status"], b["title"]) == (IRRELEVANT, "Perovskite stability")
-    assert b["reason"] == "Not organic semiconductors (abstract): perovskites"
+    assert b["reason"] == "Not organic semiconductors (abstract, A1): perovskites"
     assert "title only" in fake.calls[1]["content"][0]["text"]
     assert ledger.queue(TO_TRIAGE) == []
 

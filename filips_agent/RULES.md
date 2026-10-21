@@ -8,7 +8,7 @@ What the agent extracts and how it decides. Rules are numbered so that code, pro
 
 **A2.** Judge whether the paper contains information about a **novel** organic semiconductor: a conjugated organic compound with semiconductor properties and electronic applications that is synthesised or reported for the first time. If it does, report it as relevant.
 
-**A3.** Judge whether the paper contains information about an organic semiconductor (new or not) and is likely to contain HOMO/LUMO/IP/EA data. If it does, report it as relevant.
+**A3.** Judge whether the paper is about an organic semiconductor (new or not) and is likely to report original HOMO/LUMO/IP/EA data (measured or calculated, not referenced). If it does, report it as relevant.
 
 **A4.** If neither A2 nor A3 is fulfilled, mark the paper as irrelevant: *"No energy data expected"*.
 
