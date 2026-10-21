@@ -13,36 +13,38 @@ Builds a growing, deduplicated dataset of HOMO/LUMO/IP/EA values for organic sem
 
 | Agent | Rules | Input → output | Model |
 |---|---|---|---|
-| **Triage** | A1–A4 | abstract → `{is_osc, novel_osc, energy_data_likely, reason}`; code applies A4 | Sonnet (try Haiku) |
-| **Extractor** | P1, P2, P4–P6, P8 | main text + tables (SI only if needed) → compound records with raw values, the measurement set each value belongs to (e.g. film, solution, UPS), method wording, the CV reference (checking CV figures, captions and SI before calling it unstated), method details for `comment`, original vs cited, quote + location | Opus |
-| **Figure reader** | P5b, P6f | figure image + caption → values read from an energy-level diagram or CV trace, with a confidence | Opus (vision) |
+| **Inbox sorter** *(built)* | W6 | first pages of a dropped file + wanted papers → `{doi, kind: main/si/other}`; only filed when it agrees with the filename/DOI rules | Haiku 5.5 |
+| **Triage** *(built)* | A1–A4 | abstract → `{is_osc, novel_osc, energy_data_likely, reason}`; code applies A4 | Opus 5.5 until the triage trial (`eval/triage_trial.py`) decides |
+| **Extractor** *(built)* | P1–P9 | the PDF itself (text, tables **and figures**; SI only in a second pass if needed) + OpenAlex reference list → compounds with SMILES, raw values, measurement set, method wording, CV reference, method details, original vs cited, quote + location; uncertain-paper note; P9 references with DOIs | Opus 5.5 |
 | **Structure resolver** | P3 | compound label, name, scheme/figure images, candidate SMILES from tools → chosen SMILES/CXSMILES, route, confidence | Opus (vision) |
-| **Reference harvester** | P9 | text + reference list → cited works with likely/possible and the sentence that cites them | Sonnet |
 | **Critic** | P7c | records + quotes + method text → uncertainty flags and notes | Opus |
+
+Because Claude reads PDFs directly (pages as text and images), the planned separate *figure reader* (P5b, P6f) and *reference harvester* (P9) are part of the extractor call for now. They can be split out again if the evaluation shows they need their own pass.
 
 ## Tools (plain code)
 
 | Module | Job |
 |---|---|
 | `ledger.py` | SQLite: `sources` (DOI primary key, status, likelihood, found_in, reason), `compounds`, `records`, `review`. Exports `data.csv`, `review.csv`, `irrelevant.csv`, `reading_list.csv`, `wishlist.csv`. |
-| `fetch.py` | DOI → title, abstract, references (as DOIs) from **OpenAlex**. Open-access full text via Unpaywall / Europe PMC / bioRxiv. Otherwise → wish list (W6). |
-| `parse.py` | PDF → text by section, tables, figure captions, rendered figure/scheme images (pymupdf). Same for SI documents (P8a). |
+| `fetch.py` | DOI → title, abstract, references (DOI + title) from **OpenAlex**; open-access PDF download; otherwise → wish list (W6). Inbox filing with filename/DOI rules + the Haiku sorter. |
+| `llm.py` | The only place that calls Claude: structured JSON output validated against a schema, refusal handling, prompt caching, and cost of every call logged to `data/logs/usage.jsonl`. |
 | `normalize_values.py` | Sign and unit conversion, one row per measurement set, Fc re-anchoring to 4.8 eV, method vocabulary incl. `arbitrary`, `n/a` filling. |
-| `structures.py` | Candidate SMILES from several routes, RDKit canonicalisation, formula check (P3e). See below. |
-| `checks.py` | Quote contains value; plausible ranges (IP ≈ 4–7 eV, EA ≈ 2–4.5 eV, IP > EA, HOMO < LUMO); DFT vs electrochemical gap roughly consistent; W2a/W2b name–SMILES conflicts. |
+| `structures.py` | RDKit canonicalisation (keeps and renumbers CXSMILES `m:` blocks), formula check incl. HRMS ions (P3e). |
+| `resolve.py` | Looks up each compound's names in OPSIN and PubChem (answers cached in `data/cache/structures/`) and compares the structures with Claude's by atom skeleton. A disagreement → review; a missing structure is filled in (from PubChem only via review). Polymers and CXSMILES are skipped. |
+| `checks.py` | Usual ranges (IP 4–7, EA 2–4.5, DFT HOMO −7.5 to −3.5, DFT LUMO −5 to 0 eV), IP > EA, HOMO < LUMO, DFT gap within 1 eV of the measured gap; W2a/W2b name–SMILES conflicts with the data table from other papers. Anything flagged → review. (The quote check is in the extractor.) |
 
 ## Structures (P3): several routes, then compare
 
-1. **Name → structure:** OPSIN (rule-based IUPAC parser, web service or local Java) for systematic names.
-2. **Known compounds:** PubChem PUG REST lookup by name or synonym (P3 well-known, e.g. P3HT, PC71BM, Y6, spiro-OMeTAD). The team's own dataset counts as a source once it grows.
+1. **Name → structure** *(built)*: OPSIN (rule-based IUPAC parser, web service) for systematic names.
+2. **Known compounds** *(built)*: PubChem PUG REST lookup by name or synonym (P3 well-known, e.g. P3HT, PC71BM, Y6, spiro-OMeTAD). The team's own dataset counts as a source once it grows.
 3. **Image → structure:** crop the scheme/figure with pymupdf and run an optical structure recognition tool (OCSR): **DECIMER** (open source, best general accuracy) with **MolScribe** as a second opinion. Both have heavy ML dependencies (TensorFlow / PyTorch), so they're an optional install.
 4. **Vision LLM:** the structure resolver also reads the image directly.
-5. **Decide:** canonicalise all candidates with RDKit and compare InChIKeys. If the routes agree, accept. If they disagree, the resolver checks plausibility against the image, name and formula. Still unsure → review (P3c). Small molecules always get the formula check (P3e).
+5. **Decide:** canonicalise all candidates with RDKit and compare them. *Built for routes 1–2:* comparison by atom skeleton (heavy atoms and connections, ignoring bond orders, charges and stereo), because PubChem writes fullerenes without double bonds and drawings differ in Kekulé form. If the routes agree, accept. If they disagree, the resolver checks plausibility against the image, name and formula. Still unsure → review (P3c). Small molecules always get the formula check (P3e).
 
 Polymers: `*` end markers on the repeat unit. Ambiguous regiochemistry: CXSMILES (P3d).
 
 **RDKit caveats for these two cases:**
-- `MolToCXSmiles` silently drops `|m:…|` multicentre blocks. Canonicalise the SMILES part, remap the `m:` atom indices to the new atom order, and re-append the block.
+- `MolToCXSmiles` silently drops `|m:…|` multicentre blocks. Canonicalise the SMILES part, remap the `m:` atom indices to the new atom order, and re-append the block. Identical fragments (e.g. two `*C` groups) can swap places, so their attachment sets are listed in sorted order to make the result unique (`structures.canonicalize`).
 - InChI/InChIKey fails on `*` atoms (it returns an empty key), so polymers and CXSMILES can't be compared by InChIKey. Compare canonical (CX)SMILES strings instead.
 
 ## Pipeline
@@ -53,10 +55,10 @@ seed DOIs (LitVault digest, manual list)
        └─> Triage (A1–A4) ──> irrelevant.csv
             └─> reading list
                  └─> fetch full text ──(fails)──> wishlist.csv + awaiting_pdf
-                      └─> parse → Extractor (main text, then SI) → Figure reader if needed
-                           └─> Structure resolver → normalize_values → checks → Critic
+                      └─> Extractor reads the PDF (main text, then SI if needed)
+                           └─> structures (RDKit) → OPSIN/PubChem cross-check → normalize_values → checks (→ later: Structure resolver, Critic)
                                 └─> each compound → data.csv or review.csv (W3)
-                                └─> Reference harvester (P9)
+                                └─> P9 references from the same call
                                      ├─ likely   → reading list
                                      └─ possible → Triage on abstract
 ```
@@ -65,6 +67,7 @@ seed DOIs (LitVault digest, manual list)
 
 ## Paper access (W6)
 
+- **Saved extractions:** every raw answer is kept in `data/extractions/`; `python -m filips_agent reprocess` rebuilds the tables from them for free after the checks or conversions change.
 - **Wish list + inbox (built first):** `data/wishlist.csv` lists what's wanted. Put PDFs in `data/inbox/` (any file name; the DOI is matched from the PDF's metadata or first page, or name it `<doi with / replaced by _>.pdf`). SI files go in the same folder with an `_SI` suffix. The next run picks them up.
 - **Browser helper (optional, later):** a Claude Code skill that works through the wish list with Claude in Chrome, using your own browser login to download PDFs into the inbox. It runs interactively in Claude Code, not inside the Python pipeline. Keep downloads modest and personal, in line with publisher terms.
 
@@ -73,13 +76,13 @@ seed DOIs (LitVault digest, manual list)
 ```
 filips_agent/
   RULES.md  PLAN.md  requirements.txt
-  filips_agent/         Python package
-    ledger.py fetch.py parse.py normalize_values.py structures.py checks.py run.py
-    agents/   triage.py extractor.py figures.py structure.py references.py critic.py
-    schemas/  JSON schema per agent output
+  filips_agent/         Python package (python -m filips_agent …)
+    ledger.py fetch.py llm.py normalize_values.py structures.py resolve.py checks.py dois.py __main__.py
+    agents/   inbox_sorter.py triage.py extractor.py (schemas live next to each agent)
   eval/
     gold_labels.csv     hand-labelled reference data (tracked)
-    score.py            compares a run against gold_labels.csv
+    score.py            compares stored results with gold_labels.csv (python -m eval.score)
+    triage_trial.py     runs triage with several models side by side
   tests/
   data/                 gitignored: inbox/, cache/, ledger.db, output CSVs
   .venv/                gitignored
@@ -88,14 +91,13 @@ filips_agent/
 ## Build order
 
 1. `normalize_values.py` + tests: settles the conversion rules. *(done)*
-2. `ledger.py` + `fetch.py` (OpenAlex, Unpaywall) + wish list/inbox.
-3. Triage and Extractor agents with schemas, scored against `eval/gold_labels.csv`.
-4. `structures.py`: OPSIN, PubChem, RDKit and formula check first; DECIMER/MolScribe after.
+2. `ledger.py` + `fetch.py` (OpenAlex) + wish list/inbox, with a small command line (`python -m filips_agent …`). *(done)*
+3. Inbox sorter, triage and extractor agents with schemas, scored against `eval/gold_labels.csv`. *(built; first gold-set run and triage trial in progress)*
+4. `structures.py` + `resolve.py` + `checks.py`: RDKit, formula check, OPSIN and PubChem cross-checks, range and W2a/W2b checks. *(done)* DECIMER/MolScribe later.
 5. Figure reader, reference harvester, critic, review tables.
 6. Evaluation for Milestone IV: per-field accuracy (SMILES by InChIKey (canonical CXSMILES for polymers), values within ±0.02 eV, methods exact match), 5 runs per paper, baseline vs agent, Opus vs Sonnet.
 
 ## Gold labels
 
-`eval/gold_labels.csv` uses the W2 columns. Still to do:
-- fill in `name` for each row;
+`eval/gold_labels.csv` uses the W2 columns, with names filled in. Still to do:
 - add cases that cover the tricky rules: Fc anchored at 5.1 or 4.4 eV, a value cited from another paper (should not be extracted), a compound known only by number, values only in a figure, `CV w/o ref`, `arbitrary`.
