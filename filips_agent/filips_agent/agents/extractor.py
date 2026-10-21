@@ -142,7 +142,7 @@ Never invent values, structures or DOIs. If a structure cannot be determined, st
 the compound with smiles null."""
 
 
-def _content(main_pdf, si_paths, si_available, doi, title, references, cache_main):
+def _content(main_pdf, si_paths, si_available, doi, title, references, cache_main, hints=()):
     blocks = [llm.pdf_block(main_pdf, cache=cache_main)]
     for p in si_paths:
         if p.suffix.lower() == ".pdf":
@@ -157,8 +157,11 @@ def _content(main_pdf, si_paths, si_available, doi, title, references, cache_mai
         si_note = "Supporting information exists but is not attached; set needs_si if you need it."
     else:
         si_note = "No supporting information is available."
+    reviewer = ("\n\nA person reviewed an earlier reading of this paper and asked for it to be read again. "
+                "Their notes:\n" + "\n".join(f"- {h}" for h in hints)) if hints else ""
     blocks.append({"type": "text", "text": f"Paper: {doi}\nTitle: {title or '(unknown)'}\n{si_note}\n\n"
-                                           f"Works this paper cites (DOI: title), for the references field:\n{refs}"})
+                                           f"Works this paper cites (DOI: title), for the references field:\n{refs}"
+                                           + reviewer})
     return blocks
 
 
@@ -224,7 +227,8 @@ def extract(ledger, doi, model=None):
     has_si = bool(text["si"])
 
     def ask(si_paths):
-        content = _content(text["main"], si_paths, has_si, doi, title, references, cache_main=has_si)
+        content = _content(text["main"], si_paths, has_si, doi, title, references, cache_main=has_si,
+                           hints=ledger.hints(doi))
         return llm.ask_json(model, SYSTEM, content, SCHEMA, effort="high", max_tokens=64000,
                             task=f"extract:{doi}" + (":si" if si_paths else ""))
 

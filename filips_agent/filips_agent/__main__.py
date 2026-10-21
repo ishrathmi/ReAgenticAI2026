@@ -7,6 +7,7 @@
     python -m filips_agent extract [--batch 10] [--model M] read papers on the reading list
     python -m filips_agent triage [--batch 50] [--model M]  judge abstracts of "possible" references
     python -m filips_agent run [--batch 10]                 inbox, extract, triage, export
+    python -m filips_agent review                           apply decisions typed into review.csv
     python -m filips_agent reprocess                        rebuild records from saved extractions (no API)
     python -m filips_agent status                           counts per status
     python -m filips_agent export                           write the CSV tables to data/output/
@@ -17,7 +18,7 @@ import time
 
 import anthropic
 
-from . import fetch, llm
+from . import fetch, llm, review
 from .agents import extractor, inbox_sorter, triage
 from .ledger import TO_READ, Ledger
 
@@ -47,6 +48,16 @@ def do_extract(ledger, batch, model=None):
     fetch.INBOX.mkdir(parents=True, exist_ok=True)
 
 
+def apply_and_export(ledger):
+    """Apply decisions typed into review.csv first, so rewriting the file never loses them."""
+    try:
+        for message in review.apply(ledger):
+            print(f"review  {message}")
+        print(f"tables written to {ledger.export()}")
+    except PermissionError as e:
+        print(f"could not open {e.filename}; close it (e.g. in Excel) and run again")
+
+
 def do_triage(ledger, batch, model=None):
     for doi, status, reason in triage.run(ledger, batch, model):
         print(f"{status:10} {doi}  {reason[:100]}")
@@ -63,7 +74,7 @@ def main(argv=None):
         s = sub.add_parser(name)
         s.add_argument("--batch", type=int, default=batch)
         s.add_argument("--model", help="Claude model id (default: llm.MODELS)")
-    for name in ("status", "export", "reprocess"):
+    for name in ("status", "export", "reprocess", "review"):
         sub.add_parser(name)
     a = p.parse_args(argv)
     started = time.time()
@@ -97,17 +108,17 @@ def main(argv=None):
             do_inbox(ledger)
             do_extract(ledger, a.batch, a.model)
             do_triage(ledger, 50)
-            print(f"tables written to {ledger.export()}")
+            apply_and_export(ledger)
         elif a.cmd == "reprocess":
             for path in sorted(extractor.EXTRACTIONS.glob("*.json")):
                 doi = json.loads(path.read_text(encoding="utf-8"))["doi"]
                 print(f"{extractor.reprocess(ledger, doi):10} {doi}")
-            print(f"tables written to {ledger.export()}")
+            apply_and_export(ledger)
         elif a.cmd == "status":
             for status, n in sorted(ledger.counts().items()):
                 print(f"{status:14} {n}")
-        elif a.cmd == "export":
-            print(f"tables written to {ledger.export()}")
+        elif a.cmd in ("export", "review"):
+            apply_and_export(ledger)
 
     spent = llm.total_cost(since=started)
     if spent:

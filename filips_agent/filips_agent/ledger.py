@@ -9,14 +9,18 @@ A DOI is added once and never evaluated again. Statuses:
     partial       some records in data, some in review
     review        every record in review, incl. papers marked uncertain (P7c)
     irrelevant    rejected at the abstract or paper stage
+
+Records are in the data, review or rejected table. A record a person has decided on in
+review (accepted, corrected or rejected) is never replaced when the paper is read again.
 """
 import csv
 import sqlite3
 import time
 from pathlib import Path
 
+from .checks import name_key
 from .dois import clean_doi
-from .normalize_values import COLUMNS
+from .normalize_values import COLUMNS, NA
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
@@ -39,11 +43,19 @@ CREATE TABLE IF NOT EXISTS sources (
 CREATE TABLE IF NOT EXISTS records (
     id INTEGER PRIMARY KEY,
     source_doi TEXT NOT NULL REFERENCES sources(doi),
-    target TEXT NOT NULL CHECK (target IN ('data', 'review')),
+    target TEXT NOT NULL CHECK (target IN ('data', 'review', 'rejected')),
     review_reason TEXT,
+    reviewed TEXT,               -- a person's decision: accepted, corrected, rejected or reread
+    review_note TEXT,            -- what the person wrote, or why their decision couldn't be applied
     {", ".join(f"{c} TEXT" for c in _RECORD_COLS)}
 );
+CREATE TABLE IF NOT EXISTS hints (
+    doi TEXT NOT NULL REFERENCES sources(doi),
+    note TEXT NOT NULL,          -- for the extractor when the paper is read again
+    added_at REAL NOT NULL
+);
 """
+FINAL = ("accepted", "corrected", "rejected")  # decisions that re-reading must not undo
 
 # seeds first, then likely, then possible references promoted by triage
 _PRIORITY = "CASE likelihood WHEN 'likely' THEN 1 WHEN 'possible' THEN 2 ELSE 0 END"
@@ -54,7 +66,20 @@ class Ledger:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
         self.db.row_factory = sqlite3.Row
+        self._upgrade()
         self.db.executescript(_SCHEMA)
+
+    def _upgrade(self):
+        """Ledgers made before review existed: rebuild records with the new columns."""
+        row = self.db.execute("SELECT sql FROM sqlite_master WHERE name = 'records'").fetchone()
+        if row is None or "rejected" in row[0]:
+            return
+        cols = ", ".join(["id", "source_doi", "target", "review_reason"] + _RECORD_COLS)
+        with self.db:
+            self.db.execute("ALTER TABLE records RENAME TO records_old")
+            self.db.executescript(_SCHEMA)
+            self.db.execute(f"INSERT INTO records ({cols}) SELECT {cols} FROM records_old")
+            self.db.execute("DROP TABLE records_old")
 
     def close(self):
         self.db.close()
@@ -123,28 +148,77 @@ class Ledger:
         compound. A compound with issues goes to review; uncertain (P7c) sends all to review.
         """
         doi = clean_doi(doi)
-        targets = []
+        decided = [r for r in self._records_of(doi) if r["reviewed"] in FINAL]
         with self.db:
-            self.db.execute("DELETE FROM records WHERE source_doi = ?", (doi,))
+            self.db.execute("DELETE FROM records WHERE source_doi = ? AND (reviewed IS NULL OR reviewed"
+                            f" NOT IN ({', '.join('?' * len(FINAL))}))", (doi, *FINAL))
             for rows, issues in compounds:
+                if rows and any(_same_compound(rows[0], r) for r in decided):
+                    continue  # a person already decided on this compound
                 reasons = ([f"uncertain paper: {uncertain}"] if uncertain else []) + list(issues)
                 target = "review" if reasons else "data"
-                targets.append(target)
                 for row in rows:
                     self.db.execute(
                         f"INSERT INTO records (source_doi, target, review_reason, {', '.join(_RECORD_COLS)})"
                         f" VALUES (?, ?, ?, {', '.join('?' * len(_RECORD_COLS))})",
                         [doi, target, "; ".join(reasons) or None] + [row[c] for c in _RECORD_COLS])
-        if not targets:
-            status, reason = IRRELEVANT, "no compound with structure and energy data (P7a)"
-        elif all(t == "data" for t in targets):
+        return self.refresh_status(doi, uncertain)
+
+    def refresh_status(self, doi, uncertain=None):
+        """W3: a paper's status follows from its records (rejected ones don't count)."""
+        targets = [r["target"] for r in self._records_of(doi)]
+        kept = [t for t in targets if t != "rejected"]
+        if not kept:
+            status = IRRELEVANT
+            reason = ("all records rejected in review" if targets
+                      else "no compound with structure and energy data (P7a)")
+        elif all(t == "data" for t in kept):
             status, reason = DONE, None
-        elif all(t == "review" for t in targets):
+        elif all(t == "review" for t in kept):
             status, reason = REVIEW, uncertain
         else:
             status, reason = PARTIAL, None
         self.set_status(doi, status, reason)
         return status
+
+    def _records_of(self, doi):
+        rows = self.db.execute("SELECT * FROM records WHERE source_doi = ? ORDER BY id", (clean_doi(doi),))
+        return [dict(r) for r in rows]
+
+    def record(self, record_id):
+        row = self.db.execute("SELECT * FROM records WHERE id = ?", (record_id,)).fetchone()
+        return dict(row) if row else None
+
+    def update_record(self, record_id, **fields):
+        cols = ", ".join(f"{c} = ?" for c in fields)
+        with self.db:
+            self.db.execute(f"UPDATE records SET {cols} WHERE id = ?", (*fields.values(), record_id))
+
+    def sync_names(self):
+        """W2a: records in the data table with the same SMILES list all of each other's names."""
+        groups = {}
+        for r in self.records("data"):
+            if r["smiles"] not in (None, NA):
+                groups.setdefault(r["smiles"], []).append(r)
+        changed = 0
+        for records in groups.values():
+            names = [n for r in records if r["name"] not in (None, NA) for n in r["name"].split(", ")]
+            merged = ", ".join(dict.fromkeys(names))
+            for r in records:
+                if merged and r["name"] != merged:
+                    self.update_record(r["id"], name=merged)
+                    changed += 1
+        return changed
+
+    # --- notes for the extractor ------------------------------------------------------
+
+    def add_hint(self, doi, note):
+        with self.db:
+            self.db.execute("INSERT INTO hints VALUES (?, ?, ?)", (clean_doi(doi), note, time.time()))
+
+    def hints(self, doi):
+        rows = self.db.execute("SELECT note FROM hints WHERE doi = ? ORDER BY added_at", (clean_doi(doi),))
+        return list(dict.fromkeys(r[0] for r in rows))
 
     def records(self, target):
         rows = self.db.execute("SELECT * FROM records WHERE target = ? ORDER BY id", (target,))
@@ -157,7 +231,9 @@ class Ledger:
         out = Path(out_dir)
         out.mkdir(parents=True, exist_ok=True)
         _write(out / "data.csv", COLUMNS, self.records("data"))
-        _write(out / "review.csv", COLUMNS + ["review_reason"], self.records("review"))
+        review = [dict(r, note=r["review_note"]) for r in self.records("review")]
+        _write(out / "review.csv", REVIEW_COLUMNS, review, excel=True)
+        _write(out / "rejected.csv", COLUMNS + ["review_reason", "review_note"], self.records("rejected"))
         _write(out / "irrelevant.csv", ["doi", "title", "reason", "found_in"], self.queue(IRRELEVANT))
         everything = [dict(r) for r in self.db.execute(f"SELECT * FROM sources ORDER BY added_at, doi")]
         _write(out / "reading_list.csv", ["doi", "title", "status", "likelihood", "found_in", "reason"], everything)
@@ -166,8 +242,23 @@ class Ledger:
         return out
 
 
-def _write(path, columns, rows):
-    with open(path, "w", encoding="utf-8", newline="") as f:
+# review.csv is meant to be edited: fill in decision (and note), then run the review command
+REVIEW_COLUMNS = ["id", "decision", "note"] + COLUMNS + ["review_reason"]
+
+
+def _same_compound(row, record):
+    """Same SMILES, or a name in common (ignoring case, spaces and hyphens)."""
+    if row["smiles"] not in (None, NA) and row["smiles"] == record["smiles"]:
+        return True
+
+    def names(r):
+        return {name_key(n) for n in (r["name"] or "").split(", ") if n and n != NA}
+    return bool(names(row) & names(record))
+
+
+def _write(path, columns, rows, excel=False):
+    # utf-8-sig: Excel only recognises UTF-8 (Greek letters, primes) with the byte-order mark
+    with open(path, "w", encoding="utf-8-sig" if excel else "utf-8", newline="") as f:
         w = csv.DictWriter(f, columns, extrasaction="ignore", lineterminator="\n")
         w.writeheader()
         for r in rows:
